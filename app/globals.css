@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+@theme {
+  /* surfaces */
+  --color-canvas: #07070c;
+  --color-canvas-2: #0a0a12;
+  --color-surface: #0e0e17;
+  --color-surface-2: #15151f;
+  --color-elevated: #1b1b27;
+  --color-line: #ffffff14;
+  --color-line-strong: #ffffff2b;
+
+  /* ink */
+  --color-ink: #ecedf4;
+  --color-ink-dim: #a6a7ba;
+  --color-ink-faint: #6f7088;
+
+  /* node / accent palette */
+  --color-violet: #8b5cf6;
+  --color-blue: #4f8bff;
+  --color-cyan: #22d3ee;
+  --color-teal: #2dd4bf;
+  --color-green: #34d399;
+  --color-gold: #f5c451;
+  --color-orange: #fb923c;
+  --color-pink: #ec4899;
+  --color-red: #f87171;
+
+  --font-display: var(--font-instrument), ui-serif, Georgia, serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-violet) 40%, transparent);
+  }
+  /* scrollbars */
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #ffffff1a;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #ffffff33;
+    background-clip: content-box;
+  }
+}
+
+@layer components {
+  .glass {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface) 86%, transparent),
+      color-mix(in srgb, var(--color-canvas-2) 92%, transparent)
+    );
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid var(--color-line);
+  }
+  .glass-strong {
+    background: color-mix(in srgb, var(--color-surface-2) 92%, transparent);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid var(--color-line-strong);
+  }
+  .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+/* ── canvas backdrop ───────────────────────────────────────────── */
+.flow-canvas {
+  background-color: var(--color-canvas);
+  background-image:
+    radial-gradient(900px 520px at 16% 2%, rgba(99, 102, 241, 0.16), transparent 60%),
+    radial-gradient(820px 600px at 88% 8%, rgba(236, 72, 153, 0.1), transparent 62%),
+    radial-gradient(700px 700px at 60% 110%, rgba(45, 212, 191, 0.08), transparent 60%);
+}
+
+/* ── React Flow overrides ──────────────────────────────────────── */
+.react-flow__attribution {
+  display: none;
+}
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border: none;
+  background: var(--color-ink-faint);
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+.react-flow__handle:hover {
+  opacity: 1;
+}
+.react-flow__node {
+  cursor: grab;
+}
+.react-flow__node.dragging {
+  cursor: grabbing;
+}
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+.react-flow__node.selected .fm-node {
+  border-color: color-mix(in srgb, var(--accent, var(--color-violet)) 70%, transparent);
+}
+
+@keyframes fm-dash {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+.fm-edge-animated {
+  stroke-dasharray: 5 7;
+  animation: fm-dash 0.7s linear infinite;
+}
+
+@keyframes fm-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+.fm-running {
+  animation: fm-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes fm-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fm-fade-up {
+  animation: fm-fade-up 0.25s ease both;
+}
