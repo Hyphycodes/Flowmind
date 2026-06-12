@@ -6,6 +6,7 @@ import {
   type RunTrace,
 } from "./schema";
 import { newId } from "./validate";
+import { TEAM_TEMPLATES } from "./teamFixtures";
 
 const P = (raw: unknown): Pipeline => pipelineSchema.parse(raw);
 const R = (raw: unknown): RunTrace => runTraceSchema.parse(raw);
@@ -657,6 +658,7 @@ export const TEMPLATES: Template[] = [
     pipeline: researchPipeline,
     exampleRun: researchRun,
   },
+  ...TEAM_TEMPLATES,
 ];
 
 export function getTemplate(id: string): Template | undefined {

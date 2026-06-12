@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, RotateCw, X } from "lucide-react";
+import { Loader2, Mic, MicOff, RotateCw, Users, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
+import { cn } from "@/lib/ui/cn";
 
 export function NodeInspector() {
   const pipeline = usePipelineStore((s) => s.pipeline);
@@ -13,6 +14,7 @@ export function NodeInspector() {
   const setNodePrompt = usePipelineStore((s) => s.setNodePrompt);
   const runPipeline = usePipelineStore((s) => s.runPipeline);
   const runStatus = usePipelineStore((s) => s.runStatus);
+  const patchNode = usePipelineStore((s) => s.patchNode);
 
   const node = pipeline?.nodes.find((n) => n.id === selectedId) ?? null;
   const [prompt, setPrompt] = useState("");
@@ -75,6 +77,59 @@ export function NodeInspector() {
         </div>
       )}
 
+      {node.team && node.team.agents.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-1.5 flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
+              <Users size={12} /> Crew Room
+            </span>
+            <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] capitalize text-ink-dim">
+              {node.team.strategy}
+            </span>
+          </div>
+          <div className="space-y-1">
+            {node.team.agents.map((a) => (
+              <div
+                key={a.id}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border border-line bg-white/[0.02] px-2.5 py-1.5",
+                  a.muted && "opacity-45",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-[12px] text-ink">{a.name || a.role || a.id}</span>
+                    {a.id === node.team!.lead && (
+                      <span className="rounded bg-violet/15 px-1 text-[9px] text-violet">lead</span>
+                    )}
+                  </div>
+                  {a.role && <div className="truncate text-[10px] text-ink-faint">{a.role}</div>}
+                </div>
+                <span className="shrink-0 font-mono text-[9.5px] text-ink-faint">
+                  {a.model.replace("claude-", "")}
+                </span>
+                <button
+                  onClick={() =>
+                    patchNode(node.id, {
+                      team: {
+                        ...node.team!,
+                        agents: node.team!.agents.map((x) =>
+                          x.id === a.id ? { ...x, muted: !x.muted } : x,
+                        ),
+                      },
+                    })
+                  }
+                  title={a.muted ? "Unmute agent" : "Mute agent"}
+                  className="shrink-0 text-ink-faint transition hover:text-ink"
+                >
+                  {a.muted ? <MicOff size={13} /> : <Mic size={13} />}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => void runPipeline()}
@@ -83,7 +138,7 @@ export function NodeInspector() {
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-white/[0.04] py-2 text-[13px] font-medium text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
       >
         {runStatus === "running" ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
-        Re-run node
+        {node.team ? "Re-run team" : "Re-run node"}
       </button>
     </div>
   );

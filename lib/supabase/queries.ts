@@ -1,4 +1,12 @@
-import { pipelineSchema, runTraceSchema, type Pipeline, type RunTrace } from "@/lib/pipeline/schema";
+import {
+  pipelineSchema,
+  runTraceSchema,
+  takeSchema,
+  type Pipeline,
+  type RunTrace,
+  type Take,
+} from "@/lib/pipeline/schema";
+import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { getSupabase } from "./client";
 
 export type PipelineSummary = {
@@ -24,6 +32,10 @@ function graphOf(p: Pipeline) {
     mockInputs: p.mockInputs,
     outputTables: p.outputTables,
     uiBindings: p.uiBindings,
+    datasetIds: p.datasetIds,
+    version: p.version,
+    blueprint: p.blueprint,
+    realityMeter: p.realityMeter,
   };
 }
 
@@ -150,4 +162,113 @@ export async function listRuns(limit = 40): Promise<RunSummary[]> {
     title: r.final_output?.title ?? "Run",
     createdAt: r.created_at,
   }));
+}
+
+/* ── Datasets (Input Studio / Dataset Library) ───────────────────────── */
+
+export async function listDatasets(): Promise<Dataset[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("datasets")
+    .select("*")
+    .order("updated_at", { ascending: false });
+  if (error || !data) return [];
+  return data.flatMap((r: any) => {
+    try {
+      return [
+        datasetSchema.parse({
+          id: r.id,
+          name: r.name,
+          description: r.description ?? "",
+          mode: r.mode ?? "input_studio",
+          schema: r.schema ?? [],
+          rows: r.rows ?? [],
+          sourcePrompt: r.source_prompt ?? undefined,
+          version: r.version ?? 1,
+          qualityScore: r.quality_score ?? undefined,
+          connectedPipelines: r.connected_pipelines ?? [],
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+        }),
+      ];
+    } catch {
+      return [];
+    }
+  });
+}
+
+export async function saveDataset(d: Dataset): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("datasets").upsert(
+    {
+      id: d.id,
+      name: d.name,
+      description: d.description,
+      mode: d.mode,
+      schema: d.schema,
+      rows: d.rows,
+      source_prompt: d.sourcePrompt ?? null,
+      version: d.version,
+      quality_score: d.qualityScore ?? null,
+      connected_pipelines: d.connectedPipelines,
+    },
+    { onConflict: "id" },
+  );
+  return !error;
+}
+
+export async function deleteDataset(id: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("datasets").delete().eq("id", id);
+  return !error;
+}
+
+/* ── Takes (saved run variations) ────────────────────────────────────── */
+
+export async function saveTake(t: Take): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("takes").insert({
+    pipeline_id: t.pipelineId,
+    name: t.name,
+    trace: t.trace ?? null,
+    model_selections: t.modelSelections,
+    scores: t.scores,
+    cost_usd: t.costUsd ?? null,
+    latency_ms: t.latencyMs ?? null,
+    notes: t.notes,
+  });
+  return !error;
+}
+
+export async function listTakes(pipelineId?: string): Promise<Take[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  let q = sb.from("takes").select("*").order("created_at", { ascending: false }).limit(60);
+  if (pipelineId) q = q.eq("pipeline_id", pipelineId);
+  const { data, error } = await q;
+  if (error || !data) return [];
+  return data.flatMap((r: any) => {
+    try {
+      return [
+        takeSchema.parse({
+          id: r.id,
+          pipelineId: r.pipeline_id,
+          name: r.name,
+          trace: r.trace ?? undefined,
+          modelSelections: r.model_selections ?? {},
+          scores: r.scores ?? {},
+          costUsd: r.cost_usd ?? undefined,
+          latencyMs: r.latency_ms ?? undefined,
+          notes: r.notes ?? "",
+          createdAt: r.created_at,
+        }),
+      ];
+    } catch {
+      return [];
+    }
+  });
 }

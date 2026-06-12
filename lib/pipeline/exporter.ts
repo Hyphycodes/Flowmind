@@ -1,12 +1,77 @@
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import type { FinalOutput, OutputTable, Pipeline } from "./schema";
+import type { FinalOutput, HandoffPacket, OutputTable, Pipeline } from "./schema";
+import type { Dataset } from "@/lib/datasets/schema";
+import { getTool } from "@/lib/tools/registry";
 
 export type ExportRun = {
   steps?: unknown;
   tables?: OutputTable[];
   finalOutput?: FinalOutput | null;
+  packets?: HandoffPacket[];
+  datasets?: Dataset[];
 };
+
+function clientBlueprintMd(p: Pipeline): string {
+  const b = p.blueprint;
+  const teams = p.nodes.filter((n) => n.team);
+  return [
+    `# ${b?.name || p.name} — Client Blueprint`,
+    ``,
+    b?.pitch || p.description,
+    ``,
+    `## What it does`,
+    b?.workflowSummary || p.description,
+    ``,
+    `## Teams`,
+    ...(teams.length
+      ? teams.map((n) => `- **${n.title}** (${n.team?.strategy}) — ${n.description}`)
+      : p.nodes.map((n) => `- **${n.title}** — ${n.description}`)),
+    ``,
+    `## Data created`,
+    ...p.outputTables.map((t) => `- \`${t.name}\` (${t.columns.length} cols)`),
+    ``,
+    `## UI surfaces`,
+    ...(b?.uiSurfaces?.length
+      ? b.uiSurfaces.map((s) => `- ${s}`)
+      : p.uiBindings.map((u) => `- ${u.title} (${u.componentType})`)),
+    ``,
+    `## APIs needed`,
+    ...(b?.missingApis?.length ? b.missingApis.map((a) => `- ${a}`) : ["- _None declared_"]),
+    ``,
+    p.realityMeter
+      ? `## Reality Meter\n- Buildability: ${p.realityMeter.buildability}/100\n- Hardest part: ${p.realityMeter.hardestPart}\n- Fastest MVP: ${p.realityMeter.fastestMvpPath}`
+      : "",
+    ``,
+  ].join("\n");
+}
+
+function founderBriefMd(p: Pipeline): string {
+  const b = p.blueprint;
+  return [
+    `# ${b?.name || p.name} — Founder Brief`,
+    ``,
+    `**Pitch:** ${b?.pitch || p.description}`,
+    `**Target customer:** ${b?.targetUser || "—"}`,
+    `**Core value:** ${b?.coreValue || "—"}`,
+    ``,
+    `## MVP scope`,
+    b?.fastestMvpPath || p.realityMeter?.fastestMvpPath || "—",
+    ``,
+    `## Monetization`,
+    b?.monetization || "—",
+    ``,
+    `## Risks`,
+    p.realityMeter
+      ? `- Cost: ${p.realityMeter.costRisk}\n- Complexity: ${p.realityMeter.complexityRisk}\n- Data quality: ${p.realityMeter.dataQualityRisk}`
+      : "- _Not assessed_",
+    ``,
+    `## Launch path`,
+    `Fake first: ${p.realityMeter?.fakeFirst?.join(", ") || "—"}. ` +
+      `Automate later: ${p.realityMeter?.automateLater?.join(", ") || "—"}.`,
+    ``,
+  ].join("\n");
+}
 
 function slugify(s: string): string {
   return (
@@ -186,6 +251,78 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
   zip.file("run-pipeline.ts", runnerTs(pipeline));
   zip.file("README.md", readmeMd(pipeline));
   zip.file("spec.md", specMd(pipeline));
+
+  // ── upgraded manifest ────────────────────────────────────────────────
+  zip.file(
+    "schema.json",
+    JSON.stringify(
+      {
+        nodes: pipeline.nodes.map((n) => ({
+          id: n.id,
+          type: n.type,
+          layer: n.layer ?? null,
+          inputs: n.inputs,
+          outputs: n.outputs,
+          isTeam: !!n.team,
+        })),
+        edges: pipeline.edges.map((e) => ({
+          source: e.source,
+          target: e.target,
+          dataKey: e.dataKey ?? null,
+          contract: e.contract ?? null,
+          packetId: e.packetId ?? null,
+        })),
+        tables: pipeline.outputTables.map((t) => ({ id: t.id, columns: t.columns })),
+      },
+      null,
+      2,
+    ),
+  );
+
+  const crews = zip.folder("crews");
+  for (const n of pipeline.nodes) {
+    if (!n.team) continue;
+    crews?.file(
+      `${n.id}.json`,
+      JSON.stringify(
+        {
+          nodeId: n.id,
+          title: n.title,
+          strategy: n.team.strategy,
+          lead: n.team.lead ?? null,
+          agents: n.team.agents,
+          internalEdges: n.team.internalEdges,
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
+  const toolIds = Array.from(
+    new Set(pipeline.nodes.map((n) => n.source?.toolId).filter(Boolean) as string[]),
+  );
+  if (toolIds.length) {
+    const tools = zip.folder("tools");
+    for (const id of toolIds) {
+      const def = getTool(id);
+      if (def) tools?.file(`${id}.json`, JSON.stringify(def, null, 2));
+    }
+  }
+
+  const datasets = run?.datasets ?? [];
+  if (datasets.length) {
+    const ds = zip.folder("datasets");
+    for (const d of datasets) ds?.file(`${d.id}.json`, JSON.stringify(d, null, 2));
+  }
+
+  zip.file("ui-bindings.json", JSON.stringify(pipeline.uiBindings, null, 2));
+  zip.file("handoff-packets.json", JSON.stringify(run?.packets ?? [], null, 2));
+
+  if (pipeline.blueprint) {
+    zip.file("CLIENT_BLUEPRINT.md", clientBlueprintMd(pipeline));
+    zip.file("FOUNDER_BRIEF.md", founderBriefMd(pipeline));
+  }
 
   const blob = await zip.generateAsync({ type: "blob" });
   saveAs(blob, `${slugify(pipeline.name)}.zip`);

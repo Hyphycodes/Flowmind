@@ -10,6 +10,15 @@ autosave → export runnable files.
 The app is **not a dashboard**. It is an open canvas for composing intelligence.
 The main reaction should be: "Damn, I can see the brain."
 
+**Preserve the existing UI — do not rebuild from scratch.** The dark open canvas, fluid
+@xyflow nodes, slim sidebar, bottom command bar, and right output panel ARE the product.
+Refactor and extend; never replace them with a generic dashboard / shadcn admin shell /
+Dify clone. The canvas is the hero. Most upgrades are schema + lib + fixtures, not redesign.
+
+Positioning: Flowmind is an **AI System Design Studio** — design, simulate, inspect, remix,
+and export complex AI systems (teams of agents, sources, outputs, UI surfaces) without the
+UI becoming chaotic.
+
 ## Primary loop (never break this)
 
 > Describe → Generate / Open Pipeline → Render Canvas → Run → Fill Output Tables →
@@ -39,11 +48,35 @@ from the loop.
 - Persistence is Supabase (`lib/supabase/*`); autosave writes the pipeline graph.
 - Keep subsystems isolated.
 
-## Forward-compat: teams of agents
+## Architecture map (Source → Brain → Surface)
 
-A `PipelineNode` already carries an optional `team` (strategy + agents[]). V1 renders and
-executes a single agent per node; `lib/pipeline/executeNode.ts` branches on `team` so
-multi-agent nodes are a non-breaking later addition. Do not remove the `team` field.
+Mental model used in schemas + labels: **Source** (where data comes from) → **Brain**
+(what intelligence does) → **Surface** (how it becomes usable). All upgrade fields are
+additive + optional so existing pipelines stay valid.
+
+- **Team Nodes / Crew Rooms.** A `PipelineNode.team` (`lib/pipeline/schema.ts`) holds a
+  `strategy` (single/sequential/parallel/debate/vote/router/council) + `agents[]` + a
+  `lead`. The canvas shows departments; selecting a team node opens the **Crew Room**
+  (`components/panels/NodeInspector.tsx`) — agents, lead, models, mute. `executeNode`
+  branches on `team`. Do not remove the `team` field. Don't show all sub-agents on the
+  main canvas by default.
+- **Handoff Packets.** Slim compressed output passed between teams
+  (`lib/packets/*`, `handoffPacketSchema`): summary, key fields, confidence, assumptions,
+  missing data, warnings, field changes (added/compressed/dropped). `packetUtils` detects
+  packet loss. Stored on `RunTrace.packets` + the Jarvis fixture.
+- **Input Studio / Datasets.** Deliberate, reusable seed datasets (NOT random mock):
+  `lib/datasets/*`, `app/api/input-studio`. `node.source` declares the `InputSourceMode`.
+- **Data Contracts.** `edge.contract` declares expected/produced fields for validation.
+- **Model providers.** `lib/models/*` — provider-agnostic registry + `recommendModel`.
+  Don't hardcode only Claude (Claude is the wired provider today).
+- **Tool/API registry.** `lib/tools/*` — declarative tool defs with mock fallbacks.
+- **Takes** (`takeSchema`), **Reality Meter** + **Product Drop** (on the pipeline),
+  **Evaluator/Judge** dims (`lib/evals/*`).
+- **Export manifest.** `lib/pipeline/exporter.ts` adds `schema.json`, `crews/*`, `tools/*`,
+  `datasets/*`, `ui-bindings.json`, `handoff-packets.json`, `CLIENT_BLUEPRINT.md`,
+  `FOUNDER_BRIEF.md` on top of the developer files.
+- **Persistence.** `supabase/migrations/0002_*` adds `datasets`, `takes`,
+  `pipeline_versions`, `tools`, `model_configs`. Use migrations, never hand-hack the DB.
 
 ## Stack
 

@@ -243,6 +243,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
               finishedAt: new Date().toISOString(),
               steps: cur.steps,
               tables: cur.tables,
+              packets: [],
               finalOutput: ev.finalOutput ?? cur.finalOutput ?? undefined,
             };
             void saveRun(run);

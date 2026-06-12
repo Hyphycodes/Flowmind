@@ -62,7 +62,8 @@ still demonstrate the full UI.
 
 ## Supabase
 
-Schema lives in `supabase/migrations/0001_init.sql` (`pipelines` + `runs`). **RLS is
+Schema lives in `supabase/migrations/` — `0001` (`pipelines` + `runs`) and `0002`
+(`datasets`, `takes`, `pipeline_versions`, `tools`, `model_configs`). **RLS is
 permissive** for the single-user V1 prototype — tighten the policies before exposing it
 publicly (this is the first follow-up when auth is added).
 
@@ -72,11 +73,34 @@ Set the same env vars in your Vercel project (`ANTHROPIC_API_KEY` plus the two
 `NEXT_PUBLIC_SUPABASE_*` values) and deploy. Without them the deployed app still renders the
 seed pipeline beautifully; with them, generation, runs, and cloud autosave all work.
 
-## Forward-compat: teams of agents
+## Architecture — an AI System Design Studio
 
-Every `PipelineNode` carries an optional `team` (strategy + `agents[]`). V1 runs a single
-agent per node; `executeNode` branches on `team` so a node can become a crew
-(sequential / parallel / router / debate / vote) with no schema change.
+Flowmind isn't just a workflow builder — it's for designing complex AI systems and keeping
+them legible. The model is **Source → Brain → Surface**:
+
+- **Source** — where data comes from: Input Studio datasets, live APIs, uploads, memory.
+- **Brain** — what intelligence does: agents, and **Team Nodes** (a crew of agents with a
+  strategy: single / sequential / parallel / debate / vote / router / council).
+- **Surface** — how it becomes usable: output tables, UI bindings, exports.
+
+Key concepts:
+
+- **Team Nodes & Crew Rooms.** The canvas shows departments, not all 50 agents. Click a
+  team node to open its Crew Room (agents, lead, models, mute).
+- **Handoff Packets.** Each team passes a slim compressed packet downstream — summary,
+  key fields, confidence, assumptions, warnings, and what was added/compressed/dropped —
+  so you can debug what got handed off and spot packet loss.
+- **Input Studio.** Generate deliberate, reusable seed datasets (not random mock data) to
+  test downstream agents without hitting live APIs every time.
+- **Model providers.** Provider-agnostic registry with per-node model picking +
+  recommendations (Claude is wired; others are registry-ready).
+- **Tool/API registry, data contracts, Takes, Reality Meter, Product Drop, judges** — all
+  schema-supported (`lib/models`, `lib/tools`, `lib/datasets`, `lib/packets`, `lib/evals`).
+- **Export** also bundles `schema.json`, `crews/*`, `tools/*`, `datasets/*`,
+  `handoff-packets.json`, `ui-bindings.json`, a **Client Blueprint**, and a **Founder Brief**.
+
+Flagship fixture: **Jarvis Places Radar** — Source → Taste → Ranking → Planning → Composer
+teams with real handoff packets and a card-grid UI surface. This is why Flowmind exists.
 
 ## Scripts
 
