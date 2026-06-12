@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Braces, Download, Loader2, Play, Plus, Type } from "lucide-react";
+import { AlertTriangle, Braces, Download, Loader2, Play, Plus, Route, Type } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { exportPipeline } from "@/lib/pipeline/exporter";
+import { packetTimeline } from "@/lib/packets/packetUtils";
 import { ACCENT_HEX, isAccent } from "@/lib/ui/colors";
 import { cn } from "@/lib/ui/cn";
 import { TableList } from "./TableList";
@@ -13,6 +14,7 @@ const TABS = [
   { id: "preview", label: "Preview" },
   { id: "input", label: "Input" },
   { id: "output", label: "Output" },
+  { id: "packets", label: "Packets" },
 ] as const;
 
 export function OutputPanel() {
@@ -46,6 +48,7 @@ export function OutputPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {panelTab === "output" && <OutputTab />}
         {panelTab === "input" && <InputTab />}
+        {panelTab === "packets" && <PacketTab />}
         {panelTab === "preview" && <UIPreview tables={connectToUI ? tables : []} bindings={bindings} />}
       </div>
     </aside>
@@ -56,6 +59,11 @@ function OutputTab() {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const tables = usePipelineStore((s) => s.tables);
   const finalOutput = usePipelineStore((s) => s.finalOutput);
+  const activeRunTrace = usePipelineStore((s) => s.activeRunTrace);
+  const handoffPackets = usePipelineStore((s) => s.handoffPackets);
+  const packetWarnings = usePipelineStore((s) => s.packetWarnings);
+  const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
+  const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
   const connectToUI = usePipelineStore((s) => s.connectToUI);
   const setConnectToUI = usePipelineStore((s) => s.setConnectToUI);
   const setNotice = usePipelineStore((s) => s.setNotice);
@@ -63,7 +71,15 @@ function OutputTab() {
 
   const onExport = async () => {
     if (!pipeline) return;
-    await exportPipeline(pipeline, { tables, finalOutput });
+    await exportPipeline(pipeline, {
+      tables,
+      finalOutput,
+      packets: handoffPackets,
+      packetWarnings,
+      teamRuns: teamRunTraces,
+      agentRuns: agentRunTraces,
+      runTrace: activeRunTrace,
+    });
     setNotice("Exported pipeline files (.zip)");
   };
 
@@ -150,6 +166,140 @@ function OutputTab() {
       >
         <Download size={15} /> Export pipeline (.zip)
       </button>
+    </div>
+  );
+}
+
+function PacketTab() {
+  const pipeline = usePipelineStore((s) => s.pipeline);
+  const packets = usePipelineStore((s) => s.handoffPackets);
+  const packetWarnings = usePipelineStore((s) => s.packetWarnings);
+  const selectedPacketId = usePipelineStore((s) => s.selectedPacketId);
+  const selectPacket = usePipelineStore((s) => s.selectPacket);
+  const selectNode = usePipelineStore((s) => s.selectNode);
+  const [rawOpen, setRawOpen] = useState(false);
+
+  if (!pipeline) return null;
+  const timeline = packetTimeline(pipeline, packets);
+  const selected = timeline.find((entry) => entry.packet.packetId === selectedPacketId) ?? timeline[0];
+  const selectedWarnings = selected
+    ? packetWarnings.filter((warning) => warning.packetId === selected.packet.packetId)
+    : [];
+
+  if (timeline.length === 0) {
+    return (
+      <div className="flex min-h-56 flex-col items-center justify-center rounded-xl border border-dashed border-line px-5 text-center">
+        <Route className="mb-3 text-ink-faint" size={20} />
+        <p className="text-[13px] text-ink">No handoff packets yet.</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">
+          Run a pipeline with Team Nodes to see what each team hands off.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <section>
+        <SectionHeader title="Packet Timeline" />
+        <div className="space-y-2">
+          {timeline.map((entry, index) => {
+            const active = entry.packet.packetId === selected?.packet.packetId;
+            return (
+              <button
+                key={entry.packet.packetId}
+                type="button"
+                onClick={() => {
+                  selectPacket(entry.packet.packetId);
+                  selectNode(entry.packet.fromNodeId);
+                }}
+                className={cn(
+                  "w-full rounded-lg border p-3 text-left transition",
+                  active
+                    ? "border-violet/60 bg-violet/[0.08]"
+                    : "border-line bg-white/[0.025] hover:border-line-strong",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-ink-faint">
+                    Packet {index + 1}
+                  </span>
+                  <span className="font-mono text-[10px] text-ink-faint">
+                    {Math.round(entry.packet.confidence * 100)}%
+                  </span>
+                </div>
+                <div className="mt-1 text-[12.5px] font-medium text-ink">
+                  {entry.fromTitle} {"->"} {entry.toTitle}
+                </div>
+                <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-ink-dim">
+                  {entry.packet.summary}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {selected && (
+        <section className="space-y-3">
+          <SectionHeader title="Selected Packet">
+            <button
+              type="button"
+              onClick={() => setRawOpen((v) => !v)}
+              className="flex items-center gap-1.5 rounded-md border border-line bg-white/[0.03] px-2 py-1 text-[11px] text-ink-dim transition hover:text-ink"
+            >
+              <Braces size={12} />
+              {rawOpen ? "Hide JSON" : "Raw JSON"}
+            </button>
+          </SectionHeader>
+
+          <div className="rounded-xl border border-line bg-white/[0.03] p-3.5">
+            <div className="text-[13px] font-semibold text-ink">
+              {selected.fromTitle} {"->"} {selected.toTitle}
+            </div>
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-dim">
+              {selected.packet.summary}
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+              <PacketFields label="Added" fields={selected.packet.fieldChanges.added} />
+              <PacketFields label="Compressed" fields={selected.packet.fieldChanges.compressed} />
+              <PacketFields label="Dropped" fields={selected.packet.fieldChanges.dropped} />
+              <PacketFields label="Missing" fields={selected.packet.missingData} />
+            </div>
+          </div>
+
+          {(selected.packet.warnings.length > 0 || selectedWarnings.length > 0) && (
+            <div className="space-y-1.5">
+              {[...selected.packet.warnings.map((message) => ({ message, severity: "warning" as const })), ...selectedWarnings].map(
+                (warning, index) => (
+                  <div
+                    key={`${warning.message}-${index}`}
+                    className="flex gap-2 rounded-lg border border-gold/25 bg-gold/[0.06] p-2.5 text-[11.5px] leading-relaxed text-ink-dim"
+                  >
+                    <AlertTriangle className="mt-0.5 shrink-0 text-gold" size={13} />
+                    <span>{warning.message}</span>
+                  </div>
+                ),
+              )}
+            </div>
+          )}
+
+          {rawOpen && (
+            <pre className="max-h-80 overflow-auto rounded-xl border border-line bg-black/40 p-3 font-mono text-[10.5px] text-ink-dim">
+              {JSON.stringify(selected.packet, null, 2)}
+            </pre>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function PacketFields({ label, fields }: { label: string; fields: string[] }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-line bg-black/20 p-2">
+      <div className="mb-1 text-[10px] uppercase tracking-wide text-ink-faint">{label}</div>
+      <div className="truncate text-[11.5px] text-ink-dim">{fields.length ? fields.join(", ") : "None"}</div>
     </div>
   );
 }

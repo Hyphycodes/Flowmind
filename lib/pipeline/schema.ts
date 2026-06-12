@@ -214,6 +214,17 @@ export const handoffPacketSchema = z.object({
 });
 export type HandoffPacket = z.infer<typeof handoffPacketSchema>;
 
+export const packetWarningSchema = z.object({
+  id: z.string(),
+  packetId: z.string(),
+  fromNodeId: z.string(),
+  toNodeId: z.string().optional(),
+  severity: z.enum(["info", "warning", "error"]).default("warning"),
+  message: z.string(),
+  field: z.string().optional(),
+});
+export type PacketWarning = z.infer<typeof packetWarningSchema>;
+
 /* ── Surface: tables + UI bindings ───────────────────────────────────── */
 
 export const tableColumnSchema = z.object({
@@ -335,6 +346,67 @@ export type Pipeline = z.infer<typeof pipelineSchema>;
 
 /* ── Runs + Takes ────────────────────────────────────────────────────── */
 
+export const agentRunTraceSchema = z.object({
+  id: z.string(),
+  runId: z.string().optional(),
+  takeId: z.string().optional(),
+  teamNodeId: z.string(),
+  agentId: z.string(),
+  agentName: z.string(),
+  role: z.string().default(""),
+  status: z.enum(NODE_STATUS),
+  input: z.any().optional(),
+  output: z.any().optional(),
+  outputSummary: z.string().default(""),
+  model: z.string().default("claude-sonnet-4-6"),
+  provider: z.string().default("anthropic"),
+  prompt: z.string().default(""),
+  structuredOutput: z.any().optional(),
+  toolCalls: z.array(z.any()).default([]),
+  confidence: z.number().optional(),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+  latencyMs: z.number().default(0),
+  tokenUsage: z
+    .object({
+      inputTokens: z.number().default(0),
+      outputTokens: z.number().default(0),
+      totalTokens: z.number().default(0),
+    })
+    .optional(),
+  costUsd: z.number().optional(),
+  startedAt: z.string(),
+  finishedAt: z.string().optional(),
+});
+export type AgentRunTrace = z.infer<typeof agentRunTraceSchema>;
+
+export const teamRunTraceSchema = z.object({
+  id: z.string(),
+  runId: z.string().optional(),
+  takeId: z.string().optional(),
+  teamNodeId: z.string(),
+  teamName: z.string(),
+  strategy: z.enum(TEAM_STRATEGIES),
+  status: z.enum(NODE_STATUS),
+  input: z.any().optional(),
+  agentRuns: z.array(agentRunTraceSchema).default([]),
+  consultationSummary: z.string().default(""),
+  disagreements: z.array(z.string()).default([]),
+  mergeDecision: z.string().default(""),
+  finalOutput: z.any().optional(),
+  outputSummary: z.string().default(""),
+  handoffPacket: handoffPacketSchema.optional(),
+  outputTables: z.array(outputTableSchema).default([]),
+  confidence: z.number().optional(),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+  latencyMs: z.number().default(0),
+  costUsd: z.number().optional(),
+  startedAt: z.string(),
+  finishedAt: z.string().optional(),
+});
+export type TeamRunTrace = z.infer<typeof teamRunTraceSchema>;
+
 export const runStepSchema = z.object({
   nodeId: z.string(),
   title: z.string(),
@@ -364,6 +436,9 @@ export const runTraceSchema = z.object({
   finalOutput: finalOutputSchema.optional(),
   /** upgrade fields (optional) */
   packets: z.array(handoffPacketSchema).default([]),
+  packetWarnings: z.array(packetWarningSchema).default([]),
+  agentRuns: z.array(agentRunTraceSchema).default([]),
+  teamRuns: z.array(teamRunTraceSchema).default([]),
   takeId: z.string().optional(),
   costUsd: z.number().optional(),
   latencyMs: z.number().optional(),
@@ -389,6 +464,11 @@ export type Take = z.infer<typeof takeSchema>;
 export type RunEvent =
   | { kind: "run-start"; runId: string; order: string[] }
   | { kind: "node-start"; nodeId: string }
+  | { kind: "team-start"; teamNodeId: string }
+  | { kind: "agent-start"; teamNodeId: string; agentId: string }
+  | { kind: "agent-done"; teamNodeId: string; agentTrace: AgentRunTrace }
+  | { kind: "team-done"; teamNodeId: string; teamTrace: TeamRunTrace }
+  | { kind: "packet"; packet: HandoffPacket; warnings?: PacketWarning[] }
   | {
       kind: "node-done";
       nodeId: string;
@@ -399,4 +479,10 @@ export type RunEvent =
       tables: OutputTable[];
       packet?: HandoffPacket;
     }
-  | { kind: "run-done"; status: "success" | "error"; finalOutput?: FinalOutput; error?: string };
+  | {
+      kind: "run-done";
+      status: "success" | "error";
+      finalOutput?: FinalOutput;
+      error?: string;
+      runTrace?: RunTrace;
+    };

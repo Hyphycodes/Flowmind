@@ -1,6 +1,15 @@
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import type { FinalOutput, HandoffPacket, OutputTable, Pipeline } from "./schema";
+import type {
+  AgentRunTrace,
+  FinalOutput,
+  HandoffPacket,
+  OutputTable,
+  PacketWarning,
+  Pipeline,
+  RunTrace,
+  TeamRunTrace,
+} from "./schema";
 import type { Dataset } from "@/lib/datasets/schema";
 import { getTool } from "@/lib/tools/registry";
 
@@ -9,6 +18,10 @@ export type ExportRun = {
   tables?: OutputTable[];
   finalOutput?: FinalOutput | null;
   packets?: HandoffPacket[];
+  packetWarnings?: PacketWarning[];
+  agentRuns?: AgentRunTrace[];
+  teamRuns?: TeamRunTrace[];
+  runTrace?: RunTrace | null;
   datasets?: Dataset[];
 };
 
@@ -165,6 +178,10 @@ function readmeMd(p: Pipeline): string {
     `provider (e.g. the Anthropic API) with each node's \`prompt\`, passing the upstream`,
     `outputs as context, and return structured rows for the node's output table(s).`,
     ``,
+    `## Team Nodes and Packet View`,
+    ``,
+    `Team Nodes run internal agents, emit Handoff Packets, and save agent/team traces. Use Packet View plus the trace files to debug what changed between teams.`,
+    ``,
     `## Files`,
     ``,
     `- \`pipeline.json\` — the validated pipeline graph (nodes, edges, tables, UI bindings).`,
@@ -172,6 +189,8 @@ function readmeMd(p: Pipeline): string {
     `- \`mock-data.json\` — seeded inputs, tables, and final output.`,
     `- \`run-pipeline.ts\` — standalone topological runner.`,
     `- \`spec.md\` — human-readable architecture spec.`,
+    `- \`traces/team-runs.json\` and \`traces/agent-runs.json\` — Crew Room execution records.`,
+    `- \`packets/handoff-packets.json\` and \`packets/field-drift-warnings.json\` — packet timeline plus drift warnings.`,
     ``,
   ].join("\n");
 }
@@ -203,6 +222,8 @@ function specMd(p: Pipeline): string {
     `Each node: \`{ id, type, title, role, prompt, model, inputs[], outputs[], team? }\`.`,
     `A node may carry an optional \`team\` (strategy + agents[]) for multi-agent execution.`,
     `Output tables: \`{ id, name, sourceNodeId, columns[], rows[] }\`.`,
+    `Team traces capture agent runs, consultation summaries, disagreements, merge decisions, final team output, and emitted Handoff Packets.`,
+    `Debug a bad output by checking \`traces/team-runs.json\`, then the matching \`traces/agent-runs.json\`, then \`packets/field-drift-warnings.json\`.`,
     ``,
   ].join("\n");
 }
@@ -318,6 +339,17 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
 
   zip.file("ui-bindings.json", JSON.stringify(pipeline.uiBindings, null, 2));
   zip.file("handoff-packets.json", JSON.stringify(run?.packets ?? [], null, 2));
+
+  const traces = zip.folder("traces");
+  traces?.file("team-runs.json", JSON.stringify(run?.teamRuns ?? [], null, 2));
+  traces?.file("agent-runs.json", JSON.stringify(run?.agentRuns ?? [], null, 2));
+
+  const packets = zip.folder("packets");
+  packets?.file("handoff-packets.json", JSON.stringify(run?.packets ?? [], null, 2));
+  packets?.file("field-drift-warnings.json", JSON.stringify(run?.packetWarnings ?? [], null, 2));
+
+  const runs = zip.folder("runs");
+  runs?.file("latest-run-trace.json", JSON.stringify(run?.runTrace ?? null, null, 2));
 
   if (pipeline.blueprint) {
     zip.file("CLIENT_BLUEPRINT.md", clientBlueprintMd(pipeline));

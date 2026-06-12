@@ -110,7 +110,16 @@ export async function saveRun(run: RunTrace): Promise<boolean> {
   const { error } = await sb.from("runs").insert({
     pipeline_id: run.pipelineId,
     status: run.status,
-    trace: run.steps,
+    trace: {
+      steps: run.steps,
+      packets: run.packets,
+      packetWarnings: run.packetWarnings,
+      agentRuns: run.agentRuns,
+      teamRuns: run.teamRuns,
+      takeId: run.takeId ?? null,
+      costUsd: run.costUsd ?? null,
+      latencyMs: run.latencyMs ?? null,
+    },
     tables: run.tables,
     final_output: run.finalOutput ?? null,
     started_at: run.startedAt ?? null,
@@ -131,15 +140,24 @@ export async function getLatestRun(pipelineId: string): Promise<RunTrace | null>
     .maybeSingle();
   if (error || !data) return null;
   try {
+    const trace = data.trace;
+    const steps = Array.isArray(trace) ? trace : trace?.steps ?? [];
     return runTraceSchema.parse({
       id: data.id,
       pipelineId: data.pipeline_id,
       status: data.status,
       startedAt: data.started_at ?? undefined,
       finishedAt: data.finished_at ?? undefined,
-      steps: data.trace ?? [],
+      steps,
       tables: data.tables ?? [],
       finalOutput: data.final_output ?? undefined,
+      packets: Array.isArray(trace) ? [] : trace?.packets ?? [],
+      packetWarnings: Array.isArray(trace) ? [] : trace?.packetWarnings ?? [],
+      agentRuns: Array.isArray(trace) ? [] : trace?.agentRuns ?? [],
+      teamRuns: Array.isArray(trace) ? [] : trace?.teamRuns ?? [],
+      takeId: Array.isArray(trace) ? undefined : trace?.takeId ?? undefined,
+      costUsd: Array.isArray(trace) ? undefined : trace?.costUsd ?? undefined,
+      latencyMs: Array.isArray(trace) ? undefined : trace?.latencyMs ?? undefined,
     });
   } catch {
     return null;

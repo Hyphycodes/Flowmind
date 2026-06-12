@@ -1,22 +1,26 @@
 import { create } from "zustand";
 import {
   pipelineSchema,
+  type AgentRunTrace,
   type FinalOutput,
+  type HandoffPacket,
   type NodeStatus,
   type OutputTable,
+  type PacketWarning,
   type Pipeline,
   type PipelineNode,
   type RunEvent,
   type RunStep,
   type RunTrace,
+  type TeamRunTrace,
 } from "@/lib/pipeline/schema";
-import { newId } from "@/lib/pipeline/validate";
 import { hasSupabase } from "@/lib/supabase/client";
 import { saveRun, upsertPipeline } from "@/lib/supabase/queries";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
-export type PanelTab = "preview" | "input" | "output";
+export type PanelTab = "preview" | "input" | "output" | "packets";
+type RunOptions = { onlyNodeId?: string; onlyAgentId?: string };
 
 type Pos = { x: number; y: number };
 
@@ -31,6 +35,15 @@ interface PipelineState {
   tables: OutputTable[];
   finalOutput: FinalOutput | null;
   runError: string | null;
+  activeRunTrace: RunTrace | null;
+  teamRunTraces: TeamRunTrace[];
+  agentRunTraces: AgentRunTrace[];
+  handoffPackets: HandoffPacket[];
+  packetWarnings: PacketWarning[];
+  selectedPacketId: string | null;
+  selectedTeamTraceId: string | null;
+  runningTeamId: string | null;
+  runningAgentId: string | null;
 
   panelTab: PanelTab;
   panelOpen: boolean;
@@ -54,9 +67,12 @@ interface PipelineState {
   setConnectToUI: (v: boolean) => void;
   setActiveTable: (id: string | null) => void;
   setNotice: (n: string | null) => void;
+  selectPacket: (id: string | null) => void;
 
   generate: (description: string) => Promise<void>;
-  runPipeline: () => Promise<void>;
+  runPipeline: (options?: RunOptions) => Promise<void>;
+  rerunTeam: (nodeId: string) => Promise<void>;
+  runSoloAgent: (nodeId: string, agentId: string) => Promise<void>;
 }
 
 function applyStatuses(p: Pipeline, fn: (n: PipelineNode) => NodeStatus): Pipeline {
@@ -98,6 +114,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     tables: [],
     finalOutput: null,
     runError: null,
+    activeRunTrace: null,
+    teamRunTraces: [],
+    agentRunTraces: [],
+    handoffPackets: [],
+    packetWarnings: [],
+    selectedPacketId: null,
+    selectedTeamTraceId: null,
+    runningTeamId: null,
+    runningAgentId: null,
     panelTab: "output",
     panelOpen: true,
     connectToUI: true,
@@ -123,6 +148,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         tables,
         finalOutput: run?.finalOutput ?? null,
         runError: null,
+        activeRunTrace: run ?? null,
+        teamRunTraces: run?.teamRuns ?? [],
+        agentRunTraces: run?.agentRuns ?? [],
+        handoffPackets: run?.packets ?? [],
+        packetWarnings: run?.packetWarnings ?? [],
+        selectedPacketId: run?.packets?.[0]?.packetId ?? null,
+        selectedTeamTraceId: null,
+        runningTeamId: null,
+        runningAgentId: null,
         activeTableId: tables[0]?.id ?? null,
         saveStatus: hasSupabase() ? "saved" : "local",
         notice: null,
@@ -153,6 +187,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     setConnectToUI: (connectToUI) => set({ connectToUI }),
     setActiveTable: (activeTableId) => set({ activeTableId }),
     setNotice: (notice) => set({ notice }),
+    selectPacket: (selectedPacketId) => set({ selectedPacketId, panelTab: "packets", panelOpen: true }),
 
     generate: async (description) => {
       if (!description.trim() || get().generating) return;
@@ -182,20 +217,31 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       }
     },
 
-    runPipeline: async () => {
+    runPipeline: async (options = {}) => {
       const p = get().pipeline;
       if (!p || get().runStatus === "running") return;
+      const runNodes = options.onlyNodeId ? p.nodes.filter((n) => n.id === options.onlyNodeId) : p.nodes;
+      const seedTables = options.onlyNodeId ? (get().tables.length ? get().tables : p.outputTables) : [];
 
       set({
         runStatus: "running",
         runError: null,
         runningNodeId: null,
+        runningTeamId: null,
+        runningAgentId: null,
         runStartedAt: new Date().toISOString(),
         finalOutput: null,
-        tables: [],
+        activeRunTrace: null,
+        teamRunTraces: [],
+        agentRunTraces: [],
+        handoffPackets: [],
+        packetWarnings: [],
+        selectedPacketId: null,
+        selectedTeamTraceId: null,
+        tables: seedTables,
         panelTab: "output",
         panelOpen: true,
-        steps: p.nodes.map((n) => ({ nodeId: n.id, title: n.title, status: "idle", durationMs: 0 })),
+        steps: runNodes.map((n) => ({ nodeId: n.id, title: n.title, status: "idle", durationMs: 0 })),
         pipeline: applyStatuses(p, () => "idle"),
       });
 
@@ -213,12 +259,46 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
               st.nodeId === ev.nodeId ? { ...st, status: "running" } : st,
             ),
           }));
+        } else if (ev.kind === "team-start") {
+          set({ runningTeamId: ev.teamNodeId, selectedTeamTraceId: ev.teamNodeId });
+        } else if (ev.kind === "agent-start") {
+          set({ runningTeamId: ev.teamNodeId, runningAgentId: ev.agentId });
+        } else if (ev.kind === "agent-done") {
+          set((s) => ({
+            runningAgentId: s.runningAgentId === ev.agentTrace.agentId ? null : s.runningAgentId,
+            agentRunTraces: [
+              ...s.agentRunTraces.filter((t) => t.id !== ev.agentTrace.id),
+              ev.agentTrace,
+            ],
+          }));
+        } else if (ev.kind === "team-done") {
+          set((s) => ({
+            runningTeamId: s.runningTeamId === ev.teamNodeId ? null : s.runningTeamId,
+            selectedTeamTraceId: ev.teamTrace.id,
+            teamRunTraces: [
+              ...s.teamRunTraces.filter((t) => t.id !== ev.teamTrace.id),
+              ev.teamTrace,
+            ],
+          }));
+        } else if (ev.kind === "packet") {
+          set((s) => ({
+            handoffPackets: [
+              ...s.handoffPackets.filter((p) => p.packetId !== ev.packet.packetId),
+              ev.packet,
+            ],
+            packetWarnings: [...s.packetWarnings, ...(ev.warnings ?? [])],
+            selectedPacketId: s.selectedPacketId ?? ev.packet.packetId,
+          }));
         } else if (ev.kind === "node-done") {
           setNodeStatus(ev.nodeId, ev.status);
           set((s) => ({
             runningNodeId: s.runningNodeId === ev.nodeId ? null : s.runningNodeId,
             tables: ev.tables,
             activeTableId: s.activeTableId ?? ev.tables[0]?.id ?? null,
+            handoffPackets: ev.packet
+              ? [...s.handoffPackets.filter((p) => p.packetId !== ev.packet!.packetId), ev.packet]
+              : s.handoffPackets,
+            selectedPacketId: s.selectedPacketId ?? ev.packet?.packetId ?? null,
             steps: s.steps.map((st) =>
               st.nodeId === ev.nodeId
                 ? { ...st, status: ev.status, summary: ev.summary, durationMs: ev.durationMs }
@@ -229,24 +309,20 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
           set({
             runStatus: ev.status,
             runningNodeId: null,
+            runningTeamId: null,
+            runningAgentId: null,
             finalOutput: ev.finalOutput ?? get().finalOutput,
             runError: ev.error ?? null,
             notice: ev.error ?? null,
+            activeRunTrace: ev.runTrace ?? get().activeRunTrace,
+            teamRunTraces: ev.runTrace?.teamRuns ?? get().teamRunTraces,
+            agentRunTraces: ev.runTrace?.agentRuns ?? get().agentRunTraces,
+            handoffPackets: ev.runTrace?.packets ?? get().handoffPackets,
+            packetWarnings: ev.runTrace?.packetWarnings ?? get().packetWarnings,
           });
           const cur = get();
-          if (cur.pipeline && hasSupabase()) {
-            const run: RunTrace = {
-              id: newId("run"),
-              pipelineId: cur.pipeline.id,
-              status: ev.status,
-              startedAt: cur.runStartedAt ?? undefined,
-              finishedAt: new Date().toISOString(),
-              steps: cur.steps,
-              tables: cur.tables,
-              packets: [],
-              finalOutput: ev.finalOutput ?? cur.finalOutput ?? undefined,
-            };
-            void saveRun(run);
+          if (cur.pipeline && hasSupabase() && ev.runTrace) {
+            void saveRun(ev.runTrace);
           }
         }
       };
@@ -255,7 +331,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         const res = await fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pipeline: p }),
+          body: JSON.stringify({
+            pipeline: p,
+            onlyNodeId: options.onlyNodeId,
+            onlyAgentId: options.onlyAgentId,
+            seedTables,
+          }),
         });
         if (!res.ok || !res.body) {
           const j = await res.json().catch(() => ({}));
@@ -263,6 +344,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
             runStatus: "error",
             runError: j.error ?? "Run failed.",
             notice: j.error ?? "Run failed.",
+            runningTeamId: null,
+            runningAgentId: null,
             pipeline: applyStatuses(p, () => "idle"),
           });
           return;
@@ -292,8 +375,19 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
           runStatus: "error",
           runError: (err as Error)?.message ?? "Run failed.",
           notice: (err as Error)?.message ?? "Run failed.",
+          runningNodeId: null,
+          runningTeamId: null,
+          runningAgentId: null,
         });
       }
+    },
+
+    rerunTeam: async (nodeId) => {
+      await get().runPipeline({ onlyNodeId: nodeId });
+    },
+
+    runSoloAgent: async (nodeId, agentId) => {
+      await get().runPipeline({ onlyNodeId: nodeId, onlyAgentId: agentId });
     },
   };
 });
