@@ -3,7 +3,9 @@ import { executeNode } from "@/lib/pipeline/executeNode";
 import {
   pipelineSchema,
   outputTableSchema,
+  EXECUTION_MODES,
   type AgentRunTrace,
+  type ExecutionMode,
   type FinalOutput,
   type OutputTable,
   type PacketWarning,
@@ -127,6 +129,7 @@ export async function POST(req: Request) {
           onlyNodeId?: unknown;
           onlyAgentId?: unknown;
           seedTables?: unknown;
+          mode?: unknown;
         })
       : {};
   const parsed = pipelineSchema.safeParse(requestBody.pipeline);
@@ -134,7 +137,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid pipeline" }, { status: 400 });
   }
   const pipeline = parsed.data;
-  const modelAvailable = hasAnthropicKey();
+  const mode: ExecutionMode = (EXECUTION_MODES as readonly string[]).includes(requestBody.mode as string)
+    ? (requestBody.mode as ExecutionMode)
+    : "hybrid";
+  // simulate = deterministic/dataset-backed; live + hybrid use the model when a key exists.
+  const modelAvailable = mode === "simulate" ? false : hasAnthropicKey();
   const onlyNodeId = typeof requestBody.onlyNodeId === "string" ? requestBody.onlyNodeId : undefined;
   const onlyAgentId = typeof requestBody.onlyAgentId === "string" ? requestBody.onlyAgentId : undefined;
   const seedTables = Array.isArray(requestBody.seedTables)
@@ -274,6 +281,8 @@ export async function POST(req: Request) {
           teamRuns,
           toolTraces: [],
           modelBattles: [],
+          evalResults: [],
+          mode,
           latencyMs: Date.now() - Date.parse(startedAt),
           costUsd: teamRuns.reduce((sum, trace) => sum + (trace.costUsd ?? 0), 0),
         };
@@ -293,6 +302,8 @@ export async function POST(req: Request) {
           teamRuns,
           toolTraces: [],
           modelBattles: [],
+          evalResults: [],
+          mode,
           finalOutput,
           latencyMs: Date.now() - Date.parse(startedAt),
         };

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { evalResultSchema } from "@/lib/evals/schema";
 
 /** Canonical Flowmind schemas. Everything that renders, runs, persists, or exports
  *  flows through these. Keep this the single source of truth.
@@ -51,6 +52,11 @@ export const TEAM_STRATEGIES = [
   "council",
 ] as const;
 export type TeamStrategy = (typeof TEAM_STRATEGIES)[number];
+
+/** How a run is executed. simulate = datasets/deterministic; live = real models+tools;
+ *  hybrid = live models, dataset/source fallbacks for missing/expensive APIs. */
+export const EXECUTION_MODES = ["simulate", "live", "hybrid"] as const;
+export type ExecutionMode = (typeof EXECUTION_MODES)[number];
 
 /** Where a Source node gets its data. */
 export const SOURCE_MODES = [
@@ -581,6 +587,8 @@ export const runTraceSchema = z.object({
   teamRuns: z.array(teamRunTraceSchema).default([]),
   toolTraces: z.array(toolTraceSchema).default([]),
   modelBattles: z.array(modelBattleSchema).default([]),
+  evalResults: z.array(evalResultSchema).default([]),
+  mode: z.enum(EXECUTION_MODES).optional(),
   takeId: z.string().optional(),
   costUsd: z.number().optional(),
   latencyMs: z.number().optional(),
@@ -592,11 +600,20 @@ export const takeSchema = z.object({
   id: z.string(),
   pipelineId: z.string(),
   name: z.string().default("Take"),
+  description: z.string().default(""),
+  /** how this take was executed */
+  mode: z.enum(EXECUTION_MODES).optional(),
+  status: z.enum(["success", "warning", "error"]).default("success"),
+  runTraceId: z.string().optional(),
   trace: runTraceSchema.optional(),
   modelSelections: z.record(z.string()).default({}),
+  /** legacy flat scores (kept for back-compat) + rich per-node eval results */
   scores: z.record(z.number()).default({}),
+  evalResults: z.array(evalResultSchema).default([]),
+  overallScore: z.number().optional(),
   costUsd: z.number().optional(),
   latencyMs: z.number().optional(),
+  warningCount: z.number().optional(),
   notes: z.string().default(""),
   createdAt: z.string().default(() => new Date().toISOString()),
 });

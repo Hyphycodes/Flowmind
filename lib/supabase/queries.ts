@@ -68,9 +68,16 @@ type TakeRow = {
   id: string;
   pipeline_id: string;
   name: string;
+  description?: string | null;
+  mode?: string | null;
+  status?: string | null;
+  run_trace_id?: string | null;
   trace: unknown;
   model_selections: JsonRecord | null;
   scores: JsonRecord | null;
+  eval_results?: unknown[] | null;
+  overall_score?: number | null;
+  warning_count?: number | null;
   cost_usd: number | null;
   latency_ms: number | null;
   notes: string | null;
@@ -335,7 +342,7 @@ export async function deleteDataset(id: string): Promise<boolean> {
 export async function saveTake(t: Take): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  const { error } = await sb.from("takes").insert({
+  const base = {
     pipeline_id: t.pipelineId,
     name: t.name,
     trace: t.trace ?? null,
@@ -344,7 +351,20 @@ export async function saveTake(t: Take): Promise<boolean> {
     cost_usd: t.costUsd ?? null,
     latency_ms: t.latencyMs ?? null,
     notes: t.notes,
-  });
+  };
+  const extra = {
+    description: t.description,
+    mode: t.mode ?? null,
+    status: t.status,
+    run_trace_id: t.runTraceId ?? null,
+    eval_results: t.evalResults,
+    overall_score: t.overallScore ?? null,
+    warning_count: t.warningCount ?? null,
+  };
+  // Try with the Prompt-05 columns (migration 0005); fall back if not applied yet.
+  const rich = await sb.from("takes").insert({ ...base, ...extra });
+  if (!rich.error) return true;
+  const { error } = await sb.from("takes").insert(base);
   return !error;
 }
 
@@ -362,9 +382,16 @@ export async function listTakes(pipelineId?: string): Promise<Take[]> {
           id: r.id,
           pipelineId: r.pipeline_id,
           name: r.name,
+          description: r.description ?? "",
+          mode: r.mode ?? undefined,
+          status: r.status ?? "success",
+          runTraceId: r.run_trace_id ?? undefined,
           trace: r.trace ?? undefined,
           modelSelections: r.model_selections ?? {},
           scores: r.scores ?? {},
+          evalResults: r.eval_results ?? [],
+          overallScore: r.overall_score ?? undefined,
+          warningCount: r.warning_count ?? undefined,
           costUsd: r.cost_usd ?? undefined,
           latencyMs: r.latency_ms ?? undefined,
           notes: r.notes ?? "",

@@ -10,6 +10,7 @@ import { cn } from "@/lib/ui/cn";
 import { TableList } from "./TableList";
 import { UIPreview } from "./UIPreview";
 import { DatasetPanel } from "./DatasetPanel";
+import { TakesPanel } from "./TakesPanel";
 
 const TABS = [
   { id: "preview", label: "Preview" },
@@ -17,6 +18,7 @@ const TABS = [
   { id: "data", label: "Data" },
   { id: "output", label: "Output" },
   { id: "packets", label: "Packets" },
+  { id: "takes", label: "Takes" },
 ] as const;
 
 export function OutputPanel() {
@@ -32,13 +34,13 @@ export function OutputPanel() {
 
   return (
     <aside className="z-20 flex h-full w-[372px] shrink-0 flex-col border-l border-line bg-[#09090f]/80 backdrop-blur-xl">
-      <div className="flex items-center gap-0.5 border-b border-line px-2 py-2.5">
+      <div className="flex items-center gap-0.5 overflow-x-auto border-b border-line px-2 py-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setPanelTab(t.id)}
             className={cn(
-              "rounded-lg px-2.5 py-1.5 text-[12.5px] transition",
+              "shrink-0 rounded-lg px-2.5 py-1.5 text-[12.5px] transition",
               panelTab === t.id ? "bg-white/[0.08] text-ink" : "text-ink-dim hover:text-ink",
             )}
           >
@@ -52,6 +54,7 @@ export function OutputPanel() {
         {panelTab === "input" && <InputTab />}
         {panelTab === "data" && <DatasetPanel />}
         {panelTab === "packets" && <PacketTab />}
+        {panelTab === "takes" && <TakesPanel />}
         {panelTab === "preview" && <UIPreview tables={connectToUI ? tables : []} bindings={bindings} />}
       </div>
     </aside>
@@ -68,6 +71,7 @@ function OutputTab() {
   const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
   const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
   const datasets = usePipelineStore((s) => s.datasets);
+  const takes = usePipelineStore((s) => s.takes);
   const connectToUI = usePipelineStore((s) => s.connectToUI);
   const setConnectToUI = usePipelineStore((s) => s.setConnectToUI);
   const setNotice = usePipelineStore((s) => s.setNotice);
@@ -87,8 +91,11 @@ function OutputTab() {
       packetWarnings,
       teamRuns: teamRunTraces,
       agentRuns: agentRunTraces,
+      toolTraces: activeRunTrace?.toolTraces,
       runTrace: activeRunTrace,
       datasets: pipelineDatasets,
+      takes,
+      evalResults: activeRunTrace?.evalResults,
     });
     setNotice("Exported pipeline files (.zip)");
   };

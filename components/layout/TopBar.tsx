@@ -25,6 +25,10 @@ export function TopBar() {
   const tables = usePipelineStore((s) => s.tables);
   const finalOutput = usePipelineStore((s) => s.finalOutput);
   const datasets = usePipelineStore((s) => s.datasets);
+  const takes = usePipelineStore((s) => s.takes);
+  const activeRunTrace = usePipelineStore((s) => s.activeRunTrace);
+  const executionMode = usePipelineStore((s) => s.executionMode);
+  const setExecutionMode = usePipelineStore((s) => s.setExecutionMode);
   const setNotice = usePipelineStore((s) => s.setNotice);
 
   const [editing, setEditing] = useState(false);
@@ -63,7 +67,15 @@ export function TopBar() {
         pipeline.datasetIds.includes(d.id) ||
         (d.connectedNodeId && pipeline.nodes.some((n) => n.id === d.connectedNodeId)),
     );
-    await exportPipeline(pipeline, { tables, finalOutput, datasets: pipelineDatasets });
+    await exportPipeline(pipeline, {
+      tables,
+      finalOutput,
+      datasets: pipelineDatasets,
+      takes,
+      runTrace: activeRunTrace,
+      evalResults: activeRunTrace?.evalResults,
+      toolTraces: activeRunTrace?.toolTraces,
+    });
     setNotice("Exported pipeline files (.zip)");
   };
 
@@ -98,6 +110,16 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2">
+        <select
+          value={executionMode}
+          onChange={(e) => setExecutionMode(e.target.value as typeof executionMode)}
+          title="Execution mode — Simulate uses datasets, Live uses real models/tools, Hybrid mixes both"
+          className="rounded-lg border border-line bg-white/[0.03] px-2 py-1.5 text-[12px] text-ink-dim outline-none transition hover:text-ink"
+        >
+          <option value="simulate">Simulate</option>
+          <option value="hybrid">Hybrid</option>
+          <option value="live">Live</option>
+        </select>
         <button
           type="button"
           onClick={() => void runPipeline()}

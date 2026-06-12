@@ -8,12 +8,15 @@ import type {
   PacketWarning,
   Pipeline,
   RunTrace,
+  Take,
   TeamRunTrace,
 } from "./schema";
 import type { Dataset } from "@/lib/datasets/schema";
+import type { EvalResult } from "@/lib/evals/schema";
 import { MODELS } from "@/lib/models/providers";
 import { recommendModelForAgent, recommendModelForNode } from "@/lib/models/recommend";
 import { getTool, TOOLS } from "@/lib/tools/registry";
+import { compareTakes, summarizeRunCost } from "@/lib/takes/build";
 
 export type ExportRun = {
   steps?: unknown;
@@ -23,8 +26,11 @@ export type ExportRun = {
   packetWarnings?: PacketWarning[];
   agentRuns?: AgentRunTrace[];
   teamRuns?: TeamRunTrace[];
+  toolTraces?: unknown[];
   runTrace?: RunTrace | null;
   datasets?: Dataset[];
+  takes?: Take[];
+  evalResults?: EvalResult[];
 };
 
 const ENV_EXAMPLE = [
@@ -214,6 +220,13 @@ function readmeMd(p: Pipeline): string {
     `that a source provides the fields the next team expects; **field mappings** reconcile differing`,
     `names (e.g. \`parking_notes\` → \`parking\`); **Scenario Sets** swap datasets per test condition.`,
     ``,
+    `## Execution, Takes & Evals`,
+    ``,
+    `Runs execute in a **mode** — \`simulate\` (datasets / deterministic), \`live\` (real models + tools),`,
+    `or \`hybrid\` (live models, dataset fallbacks for missing APIs). Every full run becomes a **Take** —`,
+    `a saved variation with its run trace, model selections, cost, latency, and **eval scores**. Compare`,
+    `Takes (\`takes/comparison.json\`) to see which configuration wins on quality vs. cost vs. speed.`,
+    ``,
     `## Files`,
     ``,
     `- \`pipeline.json\` — the validated pipeline graph (nodes, edges, tables, UI bindings).`,
@@ -228,8 +241,10 @@ function readmeMd(p: Pipeline): string {
     `- \`models/model-configs.json\`, \`models/model-selections.json\`, \`models/model-recommendations.json\` — model router setup.`,
     `- \`tools/tool-definitions.json\`, \`tools/tool-attachments.json\`, \`tools/tool-traces.json\` — tool registry setup and run usage.`,
     `- \`env.example\` — environment variable names to configure; no secret values are exported.`,
-    `- \`traces/team-runs.json\` and \`traces/agent-runs.json\` — Crew Room execution records.`,
+    `- \`traces/team-runs.json\`, \`traces/agent-runs.json\`, \`traces/tool-traces.json\` — execution records.`,
     `- \`packets/handoff-packets.json\` and \`packets/field-drift-warnings.json\` — packet timeline plus drift warnings.`,
+    `- \`takes/*.json\` + \`takes/comparison.json\` — saved run variations and their comparison.`,
+    `- \`evals/eval-scores.json\` and \`costs/cost-trace.json\` — eval dimension scores and cost/latency trace.`,
     ``,
   ].join("\n");
 }
@@ -547,6 +562,45 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
 
   const runs = zip.folder("runs");
   runs?.file("latest-run-trace.json", JSON.stringify(run?.runTrace ?? null, null, 2));
+
+  traces?.file(
+    "tool-traces.json",
+    JSON.stringify(run?.toolTraces ?? run?.runTrace?.toolTraces ?? [], null, 2),
+  );
+
+  // ── Takes + evals + cost trace (Prompt 05) ──────────────────────────
+  const takes = run?.takes ?? [];
+  if (takes.length) {
+    const takesFolder = zip.folder("takes");
+    for (const t of takes) takesFolder?.file(`${t.id}.json`, JSON.stringify(t, null, 2));
+    takesFolder?.file("comparison.json", JSON.stringify(compareTakes(takes), null, 2));
+  }
+
+  const evalResults = run?.evalResults ?? run?.runTrace?.evalResults ?? [];
+  zip.file("evals/eval-scores.json", JSON.stringify(evalResults, null, 2));
+
+  const costTrace = run?.runTrace
+    ? summarizeRunCost(run.runTrace)
+    : { totalCostUsd: 0, totalLatencyMs: 0, warningCount: 0, modelsUsed: [] };
+  zip.file(
+    "costs/cost-trace.json",
+    JSON.stringify(
+      {
+        ...costTrace,
+        takes: takes.map((t) => ({
+          id: t.id,
+          name: t.name,
+          mode: t.mode,
+          overallScore: t.overallScore,
+          costUsd: t.costUsd,
+          latencyMs: t.latencyMs,
+          warningCount: t.warningCount,
+        })),
+      },
+      null,
+      2,
+    ),
+  );
 
   if (pipeline.blueprint) {
     zip.file("CLIENT_BLUEPRINT.md", clientBlueprintMd(pipeline));

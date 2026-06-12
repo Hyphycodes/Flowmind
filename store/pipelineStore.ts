@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   pipelineSchema,
   type AgentRunTrace,
+  type ExecutionMode,
   type FieldMapping,
   type FinalOutput,
   type GenerationStyle,
@@ -16,6 +17,7 @@ import {
   type RunEvent,
   type RunStep,
   type RunTrace,
+  type Take,
   type TeamRunTrace,
 } from "@/lib/pipeline/schema";
 import { hasSupabase } from "@/lib/supabase/client";
@@ -24,15 +26,18 @@ import {
   listDatasets,
   saveDataset,
   saveRun,
+  saveTake,
   upsertPipeline,
 } from "@/lib/supabase/queries";
 import type { Dataset } from "@/lib/datasets/schema";
 import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
 import { applyRepair, type RepairAction } from "@/lib/datasets/repair";
+import { runEvals } from "@/lib/evals/runEval";
+import { buildTake } from "@/lib/takes/build";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
-export type PanelTab = "preview" | "input" | "data" | "output" | "packets";
+export type PanelTab = "preview" | "input" | "data" | "output" | "packets" | "takes";
 type RunOptions = { onlyNodeId?: string; onlyAgentId?: string };
 
 export type GenerateDatasetInput = {
@@ -83,6 +88,12 @@ interface PipelineState {
   inputStudio: { open: boolean; nodeId: string | null };
   modelAvailable: boolean | null;
 
+  /** Execution / Takes */
+  executionMode: ExecutionMode;
+  takes: Take[];
+  activeTakeId: string | null;
+  compareTakeIds: string[];
+
   saveStatus: SaveStatus;
   generating: boolean;
   notice: string | null;
@@ -116,6 +127,13 @@ interface PipelineState {
   setNodeScenario: (nodeId: string, scenarioTag: string | null) => void;
   applyFieldMapping: (mapping: FieldMapping) => void;
   bindTakeTableToSource: (nodeId: string, tableId: string, snapshot: boolean) => void;
+
+  /** Execution / Takes */
+  setExecutionMode: (mode: ExecutionMode) => void;
+  hydrateTakes: (seed?: Take[]) => void;
+  selectTake: (id: string | null) => void;
+  toggleCompareTake: (id: string) => void;
+  clearCompare: () => void;
 
   generate: (description: string) => Promise<void>;
   runPipeline: (options?: RunOptions) => Promise<void>;
@@ -188,6 +206,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     datasetGenerating: false,
     inputStudio: { open: false, nodeId: null },
     modelAvailable: null,
+    executionMode: "hybrid",
+    takes: [],
+    activeTakeId: null,
+    compareTakeIds: [],
     saveStatus: "idle",
     generating: false,
     notice: null,
@@ -222,6 +244,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         activeDatasetId: null,
         datasetGenerating: false,
         inputStudio: { open: false, nodeId: null },
+        takes: [],
+        activeTakeId: null,
+        compareTakeIds: [],
         saveStatus: hasSupabase() ? "saved" : "local",
         notice: null,
       });
@@ -442,6 +467,31 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       });
     },
 
+    /* ── Execution / Takes ────────────────────────────────────────────── */
+
+    setExecutionMode: (executionMode) => set({ executionMode }),
+
+    hydrateTakes: (seed = []) =>
+      set((s) => {
+        const byId = new Map<string, Take>();
+        for (const t of seed) byId.set(t.id, t);
+        for (const t of s.takes) byId.set(t.id, t); // keep this session's runs
+        const takes = [...byId.values()];
+        return { takes, activeTakeId: s.activeTakeId ?? takes[0]?.id ?? null };
+      }),
+
+    selectTake: (activeTakeId) => set({ activeTakeId, panelTab: "takes", panelOpen: true }),
+
+    toggleCompareTake: (id) =>
+      set((s) => {
+        const has = s.compareTakeIds.includes(id);
+        if (has) return { compareTakeIds: s.compareTakeIds.filter((x) => x !== id) };
+        if (s.compareTakeIds.length >= 5) return {};
+        return { compareTakeIds: [...s.compareTakeIds, id] };
+      }),
+
+    clearCompare: () => set({ compareTakeIds: [] }),
+
     generate: async (description) => {
       if (!description.trim() || get().generating) return;
       set({ generating: true, notice: null });
@@ -559,23 +609,38 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
             ),
           }));
         } else if (ev.kind === "run-done") {
-          set({
+          const p = get().pipeline;
+          let trace = ev.runTrace ?? null;
+          let newTake: Take | null = null;
+          if (trace && p) {
+            const evalResults = runEvals(p, trace);
+            trace = { ...trace, evalResults };
+            // Every full run becomes a Take; scoped re-runs (solo agent / single team) don't.
+            if (!options.onlyNodeId) {
+              newTake = buildTake({ pipeline: p, trace, evalResults, mode: get().executionMode });
+            }
+          }
+          set((s) => ({
             runStatus: ev.status,
             runningNodeId: null,
             runningTeamId: null,
             runningAgentId: null,
-            finalOutput: ev.finalOutput ?? get().finalOutput,
+            finalOutput: ev.finalOutput ?? s.finalOutput,
             runError: ev.error ?? null,
-            notice: ev.error ?? null,
-            activeRunTrace: ev.runTrace ?? get().activeRunTrace,
-            teamRunTraces: ev.runTrace?.teamRuns ?? get().teamRunTraces,
-            agentRunTraces: ev.runTrace?.agentRuns ?? get().agentRunTraces,
-            handoffPackets: ev.runTrace?.packets ?? get().handoffPackets,
-            packetWarnings: ev.runTrace?.packetWarnings ?? get().packetWarnings,
-          });
-          const cur = get();
-          if (cur.pipeline && hasSupabase() && ev.runTrace) {
-            void saveRun(ev.runTrace);
+            notice: newTake
+              ? `Take saved: ${newTake.name} — ${newTake.overallScore ?? 0}/100`
+              : ev.error ?? null,
+            activeRunTrace: trace ?? s.activeRunTrace,
+            teamRunTraces: trace?.teamRuns ?? s.teamRunTraces,
+            agentRunTraces: trace?.agentRuns ?? s.agentRunTraces,
+            handoffPackets: trace?.packets ?? s.handoffPackets,
+            packetWarnings: trace?.packetWarnings ?? s.packetWarnings,
+            takes: newTake ? [newTake, ...s.takes].slice(0, 60) : s.takes,
+            activeTakeId: newTake ? newTake.id : s.activeTakeId,
+          }));
+          if (p && hasSupabase() && trace) {
+            void saveRun(trace);
+            if (newTake) void saveTake(newTake);
           }
         }
       };
@@ -589,6 +654,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
             onlyNodeId: options.onlyNodeId,
             onlyAgentId: options.onlyAgentId,
             seedTables,
+            mode: get().executionMode,
           }),
         });
         if (!res.ok || !res.body) {

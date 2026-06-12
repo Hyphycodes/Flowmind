@@ -4,6 +4,7 @@ import {
   type OutputTable,
   type Pipeline,
   type RunTrace,
+  type Take,
 } from "./schema";
 import type { Dataset } from "@/lib/datasets/schema";
 import { newId } from "./validate";
@@ -627,6 +628,7 @@ export type Template = {
   keywords: string[];
   pipeline: Pipeline;
   exampleRun: RunTrace;
+  takes?: Take[];
 };
 
 export const TEMPLATES: Template[] = [

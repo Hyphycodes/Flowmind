@@ -1,11 +1,14 @@
 import {
   pipelineSchema,
   runTraceSchema,
+  takeSchema,
   type HandoffPacket,
   type OutputTable,
   type Pipeline,
   type RunTrace,
+  type Take,
 } from "./schema";
+import type { EvalResult } from "@/lib/evals/schema";
 import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 
 const P = (raw: unknown): Pipeline => pipelineSchema.parse(raw);
@@ -19,7 +22,15 @@ export type TeamTemplate = {
   keywords: string[];
   pipeline: Pipeline;
   exampleRun: RunTrace;
+  takes?: Take[];
 };
+
+/** Build a deterministic EvalResult from dimension→score pairs. */
+function evalResult(nodeId: string, summary: string, pairs: [string, number][]): EvalResult {
+  const scores = pairs.map(([dimension, score]) => ({ dimension, score }));
+  const overall = Math.round(scores.reduce((s, x) => s + x.score, 0) / scores.length);
+  return { nodeId, overall, verdict: overall >= 75 ? "pass" : overall >= 50 ? "warn" : "fail", scores, summary };
+}
 
 /* ════════════════════ Jarvis Places Radar (teams + packets) ════════════════════ */
 
@@ -476,6 +487,85 @@ const jarvisRun = R({
   },
 });
 
+/** Demo Takes for the Jarvis system — run the same teams three ways and compare. */
+const jarvisModels: Record<string, string> = Object.fromEntries(
+  jarvisPipeline.nodes.map((n) => [n.id, n.model]),
+);
+
+function jarvisTake(o: {
+  id: string;
+  name: string;
+  description: string;
+  status: Take["status"];
+  costUsd: number;
+  latencyMs: number;
+  warningCount: number;
+  ranking: [string, number][];
+  overall: [string, number][];
+  models?: Record<string, string>;
+}): Take {
+  const evalResults = [
+    evalResult("ranking-team", "Ranking Team judged candidates.", o.ranking),
+    evalResult("__overall__", "Overall pipeline quality.", o.overall),
+  ];
+  const overallScore = evalResults.find((r) => r.nodeId === "__overall__")!.overall;
+  return takeSchema.parse({
+    id: o.id,
+    pipelineId: "tpl-jarvis",
+    name: o.name,
+    description: o.description,
+    mode: "hybrid",
+    status: o.status,
+    runTraceId: jarvisRun.id,
+    trace: { ...jarvisRun, id: `${o.id}-trace`, mode: "hybrid", status: "success", costUsd: o.costUsd, latencyMs: o.latencyMs, evalResults },
+    modelSelections: o.models ?? jarvisModels,
+    scores: Object.fromEntries(o.overall),
+    evalResults,
+    overallScore,
+    costUsd: o.costUsd,
+    latencyMs: o.latencyMs,
+    warningCount: o.warningCount,
+    notes: "",
+  });
+}
+
+export const JARVIS_TAKES: Take[] = [
+  jarvisTake({
+    id: "take-jarvis-balanced",
+    name: "Take 01 — Balanced Dinner Picks",
+    description: "Input Studio dataset + Claude reasoning; balanced taste vs. logistics.",
+    status: "warning",
+    costUsd: 0.071,
+    latencyMs: 12800,
+    warningCount: 1,
+    ranking: [["taste_match", 88], ["vibe_match", 87], ["corny_risk", 86], ["location_fit", 82], ["budget_fit", 85]],
+    overall: [["taste_match", 88], ["vibe_match", 87], ["corny_risk", 86], ["actionability", 84], ["location_fit", 82], ["budget_fit", 85], ["luxury_level", 78], ["freshness", 80]],
+  }),
+  jarvisTake({
+    id: "take-jarvis-premium",
+    name: "Take 02 — More Premium",
+    description: "Same dataset, luxury-biased ranking — higher vibe/luxury, higher corny risk.",
+    status: "warning",
+    costUsd: 0.094,
+    latencyMs: 14100,
+    warningCount: 2,
+    ranking: [["taste_match", 90], ["vibe_match", 91], ["corny_risk", 70], ["location_fit", 80], ["budget_fit", 72]],
+    overall: [["taste_match", 90], ["vibe_match", 91], ["corny_risk", 70], ["actionability", 82], ["location_fit", 80], ["budget_fit", 72], ["luxury_level", 94], ["freshness", 85]],
+  }),
+  jarvisTake({
+    id: "take-jarvis-fast",
+    name: "Take 03 — Fast Cheap Run",
+    description: "Haiku for classifiers/scorers — much cheaper + faster, slightly weaker reasoning.",
+    status: "warning",
+    costUsd: 0.011,
+    latencyMs: 4900,
+    warningCount: 3,
+    models: Object.fromEntries(jarvisPipeline.nodes.map((n) => [n.id, "claude-haiku-4-5-20251001"])),
+    ranking: [["taste_match", 78], ["vibe_match", 75], ["corny_risk", 82], ["location_fit", 79], ["budget_fit", 90]],
+    overall: [["taste_match", 78], ["vibe_match", 75], ["corny_risk", 82], ["actionability", 74], ["location_fit", 79], ["budget_fit", 90], ["luxury_level", 64], ["freshness", 70]],
+  }),
+];
+
 /* ════════════════════════════ Meal Curator ════════════════════════════ */
 
 const MEAL_TABLES: OutputTable[] = [
@@ -679,6 +769,7 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     keywords: ["jarvis", "places", "radar", "team", "crew", "night out", "dinner", "restaurant", "agents", "council"],
     pipeline: jarvisPipeline,
     exampleRun: jarvisRun,
+    takes: JARVIS_TAKES,
   },
   {
     id: "tpl-meal",

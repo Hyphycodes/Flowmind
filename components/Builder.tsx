@@ -25,6 +25,7 @@ import { InputStudioPanel } from "@/components/panels/InputStudioPanel";
 export function Builder() {
   const setActivePipeline = usePipelineStore((s) => s.setActivePipeline);
   const hydrateDatasets = usePipelineStore((s) => s.hydrateDatasets);
+  const hydrateTakes = usePipelineStore((s) => s.hydrateTakes);
   const pipeline = usePipelineStore((s) => s.pipeline);
   const [loading, setLoading] = useState(true);
   const booted = useRef(false);
@@ -65,6 +66,7 @@ export function Builder() {
           const p = instantiatePipeline(t.pipeline);
           if (hasSupabase()) await upsertPipeline(p);
           setActivePipeline(p, { ...t.exampleRun, pipelineId: p.id });
+          if (t.takes?.length) hydrateTakes(t.takes.map((tk) => ({ ...tk, pipelineId: p.id })));
           window.history.replaceState({}, "", "/");
           setLoading(false);
           return;
