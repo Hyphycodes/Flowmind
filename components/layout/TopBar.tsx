@@ -24,6 +24,7 @@ export function TopBar() {
   const togglePanel = usePipelineStore((s) => s.togglePanel);
   const tables = usePipelineStore((s) => s.tables);
   const finalOutput = usePipelineStore((s) => s.finalOutput);
+  const datasets = usePipelineStore((s) => s.datasets);
   const setNotice = usePipelineStore((s) => s.setNotice);
 
   const [editing, setEditing] = useState(false);
@@ -57,7 +58,12 @@ export function TopBar() {
 
   const onShare = async () => {
     if (!pipeline) return;
-    await exportPipeline(pipeline, { tables, finalOutput });
+    const pipelineDatasets = datasets.filter(
+      (d) =>
+        pipeline.datasetIds.includes(d.id) ||
+        (d.connectedNodeId && pipeline.nodes.some((n) => n.id === d.connectedNodeId)),
+    );
+    await exportPipeline(pipeline, { tables, finalOutput, datasets: pipelineDatasets });
     setNotice("Exported pipeline files (.zip)");
   };
 

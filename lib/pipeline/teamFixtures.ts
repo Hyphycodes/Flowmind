@@ -23,33 +23,54 @@ export type TeamTemplate = {
 
 /* ════════════════════ Jarvis Places Radar (teams + packets) ════════════════════ */
 
-/** Reusable Input Studio dataset for the Source Team. */
+/** Reusable Input Studio dataset for the Source Team — "Chicago Dinner Candidates v1".
+ *  A deliberate Seed Dataset (NOT mock junk) with Google-Places-like fields. One row
+ *  leaves `parking_notes` empty so the missing-value + contract utilities have something
+ *  real to surface; the Source Team provides `parking_notes` while the next team expects
+ *  `parking`, demonstrating a field mapping + contract warning. */
 export const JARVIS_PLACES_DATASET: Dataset = datasetSchema.parse({
   id: "ds-places-seed",
-  name: "Upscale Chicago Dinner Candidates",
-  description: "30 realistic upscale Chicago dinner candidates with Google-Places-like fields.",
+  name: "Chicago Dinner Candidates v1",
+  description: "Realistic upscale Chicago dinner candidates with Google-Places-like fields, tuned for a date-night scenario.",
   mode: "input_studio",
   sourcePrompt:
-    "Generate 30 realistic upscale Chicago dinner candidates with fields similar to Google Places results.",
-  qualityScore: 92,
+    "Generate realistic upscale Chicago dinner candidates with fields similar to Google Places results, for a date-night scenario.",
+  qualityTarget: "high_quality",
+  generationStyle: "api_like",
+  scenarioTags: ["date_night"],
+  requiredFields: ["name", "neighborhood", "rating", "price_level", "vibe"],
+  qualityScore: 90,
   schema: [
     { key: "name", label: "Place", type: "text" },
+    { key: "category", label: "Category", type: "text" },
+    { key: "address", label: "Address", type: "text" },
     { key: "neighborhood", label: "Area", type: "text" },
-    { key: "cuisine", label: "Cuisine", type: "text" },
-    { key: "price", label: "Price", type: "badge" },
     { key: "rating", label: "Rating", type: "number" },
+    { key: "review_count", label: "Reviews", type: "number" },
+    { key: "price_level", label: "Price", type: "badge" },
     { key: "vibe", label: "Vibe", type: "badge" },
-    { key: "parking", label: "Parking", type: "badge" },
+    { key: "tags", label: "Tags", type: "text" },
+    { key: "open_now", label: "Open", type: "badge" },
+    { key: "distance_minutes", label: "Drive", type: "number" },
+    { key: "parking_notes", label: "Parking", type: "text" },
+    { key: "reservation_likelihood", label: "Reservation", type: "badge" },
+    { key: "why_it_fits", label: "Why it fits", type: "text" },
+    { key: "risk_notes", label: "Risk", type: "text" },
+    { key: "source_confidence", label: "Confidence", type: "percent" },
   ],
   rows: [
-    { name: "Ember & Oak", neighborhood: "West Loop", cuisine: "New American", price: "$$$", rating: 4.7, vibe: "elevated", parking: "valet" },
-    { name: "Lune", neighborhood: "River North", cuisine: "French", price: "$$$$", rating: 4.6, vibe: "intimate", parking: "street" },
-    { name: "Saffron Hall", neighborhood: "Fulton Market", cuisine: "Modern Indian", price: "$$$", rating: 4.8, vibe: "buzzy", parking: "lot" },
-    { name: "The Lakehouse", neighborhood: "Streeterville", cuisine: "Seafood", price: "$$$$", rating: 4.5, vibe: "scenic", parking: "valet" },
-    { name: "Cinta", neighborhood: "Logan Square", cuisine: "Spanish", price: "$$", rating: 4.6, vibe: "lively", parking: "street" },
-    { name: "Maison Verre", neighborhood: "Gold Coast", cuisine: "French", price: "$$$$", rating: 4.7, vibe: "refined", parking: "valet" },
-    { name: "Toro & Vine", neighborhood: "West Loop", cuisine: "Steak", price: "$$$", rating: 4.5, vibe: "elevated", parking: "lot" },
-    { name: "Koi Garden", neighborhood: "River North", cuisine: "Japanese", price: "$$$", rating: 4.7, vibe: "sleek", parking: "valet" },
+    { name: "Ember & Oak", category: "New American", address: "933 W Randolph St", neighborhood: "West Loop", rating: 4.7, review_count: 1840, price_level: "$$$", vibe: "elevated", tags: "date-night, cozy, wood-fired", open_now: true, distance_minutes: 18, parking_notes: "valet out front", reservation_likelihood: "medium", why_it_fits: "Elevated but not flashy; warm room, great for a date.", risk_notes: "Books up Fri/Sat", source_confidence: 92 },
+    { name: "Lune", category: "French", address: "612 N Wells St", neighborhood: "River North", rating: 4.6, review_count: 980, price_level: "$$$$", vibe: "intimate", tags: "romantic, quiet, tasting-menu", open_now: true, distance_minutes: 22, parking_notes: "street + nearby garage", reservation_likelihood: "low", why_it_fits: "Intimate and refined for a special night.", risk_notes: "Pricey; small room", source_confidence: 88 },
+    { name: "Saffron Hall", category: "Modern Indian", address: "1009 W Lake St", neighborhood: "Fulton Market", rating: 4.8, review_count: 2210, price_level: "$$$", vibe: "buzzy", tags: "flavorful, lively, shareable", open_now: true, distance_minutes: 19, parking_notes: "lot around the corner", reservation_likelihood: "medium", why_it_fits: "Buzzy and excellent food; easy to share.", risk_notes: "Can get loud", source_confidence: 90 },
+    { name: "The Lakehouse", category: "Seafood", address: "455 E Illinois St", neighborhood: "Streeterville", rating: 4.5, review_count: 3120, price_level: "$$$$", vibe: "scenic", tags: "views, classic, special-occasion", open_now: false, distance_minutes: 26, parking_notes: "valet", reservation_likelihood: "high", why_it_fits: "Scenic lakeside view for a memorable evening.", risk_notes: "Touristy at peak", source_confidence: 84 },
+    { name: "Cinta", category: "Spanish", address: "2553 N Milwaukee Ave", neighborhood: "Logan Square", rating: 4.6, review_count: 760, price_level: "$$", vibe: "lively", tags: "tapas, fun, affordable", open_now: true, distance_minutes: 24, parking_notes: "", reservation_likelihood: "high", why_it_fits: "Lively and affordable without losing the vibe.", risk_notes: "Street parking only", source_confidence: 81 },
+    { name: "Maison Verre", category: "French", address: "12 E Delaware Pl", neighborhood: "Gold Coast", rating: 4.7, review_count: 1340, price_level: "$$$$", vibe: "refined", tags: "elegant, formal, wine", open_now: true, distance_minutes: 21, parking_notes: "valet", reservation_likelihood: "low", why_it_fits: "Refined French; strong wine program.", risk_notes: "Slightly formal for a weekday", source_confidence: 87 },
+    { name: "Toro & Vine", category: "Steakhouse", address: "820 W Lake St", neighborhood: "West Loop", rating: 4.5, review_count: 1620, price_level: "$$$", vibe: "elevated", tags: "steak, classic, sturdy", open_now: true, distance_minutes: 18, parking_notes: "lot adjacent", reservation_likelihood: "medium", why_it_fits: "Solid steak with easy logistics.", risk_notes: "Less unique", source_confidence: 83 },
+    { name: "Koi Garden", category: "Japanese", address: "707 N Wells St", neighborhood: "River North", rating: 4.7, review_count: 1190, price_level: "$$$", vibe: "sleek", tags: "sushi, photo-worthy, modern", open_now: true, distance_minutes: 23, parking_notes: "valet + garage", reservation_likelihood: "medium", why_it_fits: "Sleek and photo-worthy without being flashy.", risk_notes: "Sushi pricing adds up", source_confidence: 86 },
+    { name: "Aster & Gold", category: "Mediterranean", address: "1132 W Grand Ave", neighborhood: "West Town", rating: 4.6, review_count: 540, price_level: "$$$", vibe: "warm", tags: "seasonal, candlelit, cozy", open_now: true, distance_minutes: 20, parking_notes: "street, easy after 7", reservation_likelihood: "high", why_it_fits: "Candlelit and seasonal; quietly romantic.", risk_notes: "Newer, fewer reviews", source_confidence: 78 },
+    { name: "Verdant", category: "Vegetarian Fine Dining", address: "1531 N Damen Ave", neighborhood: "Wicker Park", rating: 4.7, review_count: 880, price_level: "$$$", vibe: "inventive", tags: "plant-forward, creative, calm", open_now: true, distance_minutes: 25, parking_notes: "small lot", reservation_likelihood: "medium", why_it_fits: "Inventive plant-forward menu; calm room.", risk_notes: "Niche for some diners", source_confidence: 80 },
+    { name: "Brass Owl", category: "Cocktail + Small Plates", address: "401 N Milwaukee Ave", neighborhood: "Fulton River District", rating: 4.4, review_count: 1450, price_level: "$$", vibe: "moody", tags: "cocktails, late, low-key", open_now: true, distance_minutes: 17, parking_notes: "garage nearby", reservation_likelihood: "high", why_it_fits: "Moody cocktail spot for a low-key date.", risk_notes: "Light on mains", source_confidence: 76 },
+    { name: "Nori", category: "Omakase", address: "228 W Kinzie St", neighborhood: "River North", rating: 4.9, review_count: 410, price_level: "$$$$", vibe: "exclusive", tags: "omakase, counter, special", open_now: false, distance_minutes: 22, parking_notes: "valet only", reservation_likelihood: "low", why_it_fits: "Exclusive counter omakase for a milestone.", risk_notes: "Hard to book; expensive", source_confidence: 85 },
   ],
 });
 
@@ -161,6 +182,10 @@ export const jarvisPipeline = P({
   description:
     "A multi-team night-out system: Source → Taste → Ranking → Planning → Composer. The canvas shows departments; each Team Node opens a Crew Room and hands off a slim packet.",
   datasetIds: ["ds-places-seed"],
+  scenarioSets: [
+    { id: "sc-date-night", name: "Date night in Chicago", tag: "date_night", description: "Romantic, upscale, photo-worthy but not flashy.", prompt: "upscale Chicago dinner spots for a date night", datasetIds: ["ds-places-seed"] },
+    { id: "sc-rainy-sunday", name: "Rainy Sunday", tag: "rainy_sunday", description: "Cozy indoor spots, comfort-forward.", prompt: "cozy rainy-Sunday Chicago spots", datasetIds: [] },
+  ],
   blueprint: {
     name: "Jarvis Places Radar",
     pitch: "Tell it your vibe; it scouts, judges, plans, and composes a night out.",
@@ -306,7 +331,38 @@ export const jarvisPipeline = P({
   ],
   edges: [
     { id: "je1", source: "input", target: "taste-team", dataKey: "brief" },
-    { id: "je2", source: "source-team", target: "taste-team", dataKey: "places", label: "places", packetId: "pkt_source", contract: { provides: [{ key: "places", type: "array", required: true }], expects: [{ key: "places", type: "array", required: true }], status: "ok" } },
+    {
+      id: "je2",
+      source: "source-team",
+      target: "taste-team",
+      dataKey: "places",
+      label: "places",
+      packetId: "pkt_source",
+      contract: {
+        provides: [
+          { key: "name", type: "string", required: true },
+          { key: "neighborhood", type: "string", required: true },
+          { key: "rating", type: "number", required: true },
+          { key: "vibe", type: "string", required: true },
+          { key: "parking_notes", type: "string", required: false },
+        ],
+        expects: [
+          { key: "name", type: "string", required: false },
+          { key: "neighborhood", type: "string", required: false },
+          { key: "rating", type: "number", required: false },
+          { key: "vibe", type: "string", required: false },
+          { key: "parking", type: "string", required: true },
+        ],
+        status: "warning",
+        warnings: [
+          {
+            severity: "warning",
+            field: "parking",
+            message: "Source provides `parking_notes` but the Taste Team expects `parking`. Apply the suggested mapping.",
+          },
+        ],
+      },
+    },
     { id: "je3", source: "source-team", target: "ranking-team", dataKey: "places" },
     { id: "je4", source: "taste-team", target: "ranking-team", dataKey: "taste_profile", label: "taste_profile", packetId: "pkt_taste" },
     { id: "je5", source: "ranking-team", target: "planning-team", dataKey: "ranked_places", label: "ranked_places", packetId: "pkt_ranking" },

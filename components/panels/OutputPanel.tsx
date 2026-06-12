@@ -9,10 +9,12 @@ import { ACCENT_HEX, isAccent } from "@/lib/ui/colors";
 import { cn } from "@/lib/ui/cn";
 import { TableList } from "./TableList";
 import { UIPreview } from "./UIPreview";
+import { DatasetPanel } from "./DatasetPanel";
 
 const TABS = [
   { id: "preview", label: "Preview" },
   { id: "input", label: "Input" },
+  { id: "data", label: "Data" },
   { id: "output", label: "Output" },
   { id: "packets", label: "Packets" },
 ] as const;
@@ -30,13 +32,13 @@ export function OutputPanel() {
 
   return (
     <aside className="z-20 flex h-full w-[372px] shrink-0 flex-col border-l border-line bg-[#09090f]/80 backdrop-blur-xl">
-      <div className="flex items-center gap-1 border-b border-line px-3 py-2.5">
+      <div className="flex items-center gap-0.5 border-b border-line px-2 py-2.5">
         {TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setPanelTab(t.id)}
             className={cn(
-              "rounded-lg px-3 py-1.5 text-[13px] transition",
+              "rounded-lg px-2.5 py-1.5 text-[12.5px] transition",
               panelTab === t.id ? "bg-white/[0.08] text-ink" : "text-ink-dim hover:text-ink",
             )}
           >
@@ -48,6 +50,7 @@ export function OutputPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {panelTab === "output" && <OutputTab />}
         {panelTab === "input" && <InputTab />}
+        {panelTab === "data" && <DatasetPanel />}
         {panelTab === "packets" && <PacketTab />}
         {panelTab === "preview" && <UIPreview tables={connectToUI ? tables : []} bindings={bindings} />}
       </div>
@@ -64,6 +67,7 @@ function OutputTab() {
   const packetWarnings = usePipelineStore((s) => s.packetWarnings);
   const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
   const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
+  const datasets = usePipelineStore((s) => s.datasets);
   const connectToUI = usePipelineStore((s) => s.connectToUI);
   const setConnectToUI = usePipelineStore((s) => s.setConnectToUI);
   const setNotice = usePipelineStore((s) => s.setNotice);
@@ -71,6 +75,11 @@ function OutputTab() {
 
   const onExport = async () => {
     if (!pipeline) return;
+    const pipelineDatasets = datasets.filter(
+      (d) =>
+        pipeline.datasetIds.includes(d.id) ||
+        (d.connectedNodeId && pipeline.nodes.some((n) => n.id === d.connectedNodeId)),
+    );
     await exportPipeline(pipeline, {
       tables,
       finalOutput,
@@ -79,6 +88,7 @@ function OutputTab() {
       teamRuns: teamRunTraces,
       agentRuns: agentRunTraces,
       runTrace: activeRunTrace,
+      datasets: pipelineDatasets,
     });
     setNotice("Exported pipeline files (.zip)");
   };

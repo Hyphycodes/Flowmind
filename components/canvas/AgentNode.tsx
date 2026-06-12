@@ -10,6 +10,7 @@ import { cn } from "@/lib/ui/cn";
 
 function AgentNodeImpl({ data, selected }: NodeProps) {
   const node = data as unknown as PipelineNode;
+  const sourceBadge = (data as { sourceBadge?: { label: string; meta: string } }).sourceBadge;
   const accent = hexFor({ color: node.color, type: node.type });
   const Icon = iconForNode(node);
   const status = node.status;
@@ -65,6 +66,20 @@ function AgentNodeImpl({ data, selected }: NodeProps) {
         </div>
         <StatusDot status={status} accent={accent} />
       </div>
+
+      {sourceBadge && (
+        <div className="mt-2.5">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-[2px] text-[10px] font-medium"
+            style={{ background: withAlpha(accent, 0.12), color: withAlpha(accent, 0.95) }}
+            title={`Source · ${sourceBadge.label}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: accent }} />
+            {sourceBadge.label}
+            {sourceBadge.meta ? <span className="text-ink-faint">· {sourceBadge.meta}</span> : null}
+          </span>
+        </div>
+      )}
 
       {node.outputs.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1">

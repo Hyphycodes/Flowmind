@@ -2,25 +2,51 @@ import { create } from "zustand";
 import {
   pipelineSchema,
   type AgentRunTrace,
+  type FieldMapping,
   type FinalOutput,
+  type GenerationStyle,
   type HandoffPacket,
+  type InputSourceMode,
   type NodeStatus,
   type OutputTable,
   type PacketWarning,
   type Pipeline,
   type PipelineNode,
+  type QualityTarget,
   type RunEvent,
   type RunStep,
   type RunTrace,
   type TeamRunTrace,
 } from "@/lib/pipeline/schema";
 import { hasSupabase } from "@/lib/supabase/client";
-import { saveRun, upsertPipeline } from "@/lib/supabase/queries";
+import {
+  deleteDataset,
+  listDatasets,
+  saveDataset,
+  saveRun,
+  upsertPipeline,
+} from "@/lib/supabase/queries";
+import type { Dataset } from "@/lib/datasets/schema";
+import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
+import { applyRepair, type RepairAction } from "@/lib/datasets/repair";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
-export type PanelTab = "preview" | "input" | "output" | "packets";
+export type PanelTab = "preview" | "input" | "data" | "output" | "packets";
 type RunOptions = { onlyNodeId?: string; onlyAgentId?: string };
+
+export type GenerateDatasetInput = {
+  name?: string;
+  prompt: string;
+  rowCount?: number;
+  qualityTarget?: QualityTarget;
+  generationStyle?: GenerationStyle;
+  scenarioTags?: string[];
+  requiredFields?: string[];
+  columns?: { key: string; label: string; type?: string }[];
+  existingRows?: Record<string, unknown>[];
+  datasetId?: string;
+};
 
 type Pos = { x: number; y: number };
 
@@ -50,6 +76,13 @@ interface PipelineState {
   connectToUI: boolean;
   activeTableId: string | null;
 
+  /** Input Studio / Dataset Library (session-global) */
+  datasets: Dataset[];
+  activeDatasetId: string | null;
+  datasetGenerating: boolean;
+  inputStudio: { open: boolean; nodeId: string | null };
+  modelAvailable: boolean | null;
+
   saveStatus: SaveStatus;
   generating: boolean;
   notice: string | null;
@@ -69,6 +102,21 @@ interface PipelineState {
   setNotice: (n: string | null) => void;
   selectPacket: (id: string | null) => void;
 
+  /** Input Studio / Source Layer */
+  hydrateDatasets: (seed?: Dataset[]) => Promise<void>;
+  upsertDataset: (d: Dataset) => void;
+  removeDataset: (id: string) => Promise<void>;
+  repairDataset: (id: string, action: RepairAction) => void;
+  setActiveDataset: (id: string | null) => void;
+  openInputStudio: (nodeId?: string | null) => void;
+  closeInputStudio: () => void;
+  generateDataset: (input: GenerateDatasetInput, opts?: { bindNodeId?: string | null }) => Promise<Dataset | null>;
+  setSourceMode: (nodeId: string, mode: InputSourceMode) => void;
+  useDatasetForNode: (nodeId: string, datasetId: string) => void;
+  setNodeScenario: (nodeId: string, scenarioTag: string | null) => void;
+  applyFieldMapping: (mapping: FieldMapping) => void;
+  bindTakeTableToSource: (nodeId: string, tableId: string, snapshot: boolean) => void;
+
   generate: (description: string) => Promise<void>;
   runPipeline: (options?: RunOptions) => Promise<void>;
   rerunTeam: (nodeId: string) => Promise<void>;
@@ -77,6 +125,14 @@ interface PipelineState {
 
 function applyStatuses(p: Pipeline, fn: (n: PipelineNode) => NodeStatus): Pipeline {
   return { ...p, nodes: p.nodes.map((n) => ({ ...n, status: fn(n) })) };
+}
+
+function upsertById<T extends { id: string }>(arr: T[], item: T): T[] {
+  const i = arr.findIndex((x) => x.id === item.id);
+  if (i === -1) return [...arr, item];
+  const copy = arr.slice();
+  copy[i] = item;
+  return copy;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -127,6 +183,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     panelOpen: true,
     connectToUI: true,
     activeTableId: null,
+    datasets: [],
+    activeDatasetId: null,
+    datasetGenerating: false,
+    inputStudio: { open: false, nodeId: null },
+    modelAvailable: null,
     saveStatus: "idle",
     generating: false,
     notice: null,
@@ -158,6 +219,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         runningTeamId: null,
         runningAgentId: null,
         activeTableId: tables[0]?.id ?? null,
+        activeDatasetId: null,
+        datasetGenerating: false,
+        inputStudio: { open: false, nodeId: null },
         saveStatus: hasSupabase() ? "saved" : "local",
         notice: null,
       });
@@ -188,6 +252,195 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     setActiveTable: (activeTableId) => set({ activeTableId }),
     setNotice: (notice) => set({ notice }),
     selectPacket: (selectedPacketId) => set({ selectedPacketId, panelTab: "packets", panelOpen: true }),
+
+    /* ── Input Studio / Source Layer ──────────────────────────────────── */
+
+    hydrateDatasets: async (seed = []) => {
+      const stored = hasSupabase() ? await listDatasets() : [];
+      const byId = new Map<string, Dataset>();
+      for (const d of stored) byId.set(d.id, d);
+      for (const d of get().datasets) byId.set(d.id, d); // keep session generations
+      for (const d of seed) byId.set(d.id, enrichDataset(d)); // fixtures win
+      set({ datasets: [...byId.values()] });
+    },
+
+    upsertDataset: (d) => {
+      const enriched = enrichDataset(d);
+      set((s) => ({ datasets: [enriched, ...s.datasets.filter((x) => x.id !== enriched.id)] }));
+      if (hasSupabase()) void saveDataset(enriched);
+    },
+
+    removeDataset: async (id) => {
+      set((s) => ({
+        datasets: s.datasets.filter((d) => d.id !== id),
+        activeDatasetId: s.activeDatasetId === id ? null : s.activeDatasetId,
+      }));
+      if (hasSupabase()) await deleteDataset(id);
+    },
+
+    repairDataset: (id, action) => {
+      const d = get().datasets.find((x) => x.id === id);
+      if (!d) return;
+      get().upsertDataset(applyRepair(d, action));
+      set({ notice: `Repaired "${d.name}" — ${action}.` });
+    },
+
+    setActiveDataset: (activeDatasetId) =>
+      set({ activeDatasetId, panelTab: "data", panelOpen: true }),
+
+    openInputStudio: (nodeId = null) => set({ inputStudio: { open: true, nodeId } }),
+    closeInputStudio: () => set({ inputStudio: { open: false, nodeId: null } }),
+
+    generateDataset: async (input, opts = {}) => {
+      if (!input.prompt.trim() || get().datasetGenerating) return null;
+      set({ datasetGenerating: true, notice: null });
+      try {
+        const res = await fetch("/api/input-studio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j.dataset) {
+          set({ notice: j.error ?? "Dataset generation failed." });
+          return null;
+        }
+        const dataset = enrichDataset(j.dataset as Dataset);
+        get().upsertDataset(dataset);
+        set({
+          activeDatasetId: dataset.id,
+          modelAvailable: typeof j.modelAvailable === "boolean" ? j.modelAvailable : get().modelAvailable,
+          notice:
+            j.modelAvailable === false
+              ? "Generated a deterministic demo dataset (no model key)."
+              : `Generated "${dataset.name}" — ${dataset.rows.length} rows.`,
+        });
+        if (opts.bindNodeId) get().useDatasetForNode(opts.bindNodeId, dataset.id);
+        return dataset;
+      } catch (err) {
+        set({ notice: (err as Error)?.message ?? "Dataset generation failed." });
+        return null;
+      } finally {
+        set({ datasetGenerating: false });
+      }
+    },
+
+    setSourceMode: (nodeId, mode) =>
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) =>
+          n.id === nodeId ? { ...n, source: { ...(n.source ?? {}), mode } } : n,
+        ),
+      })),
+
+    useDatasetForNode: (nodeId, datasetId) => {
+      const dataset = get().datasets.find((d) => d.id === datasetId);
+      if (!dataset) return;
+      get().upsertDataset({ ...dataset, connectedNodeId: nodeId });
+      mutate((p) => {
+        const node = p.nodes.find((n) => n.id === nodeId);
+        const tableId = node?.outputs[0] ?? dataset.id;
+        const table = tableFromDataset(dataset, nodeId, tableId);
+        return {
+          ...p,
+          datasetIds: Array.from(new Set([...p.datasetIds, datasetId])),
+          nodes: p.nodes.map((n) =>
+            n.id === nodeId
+              ? {
+                  ...n,
+                  source: { ...(n.source ?? {}), mode: "input_studio", datasetId, datasetName: dataset.name },
+                }
+              : n,
+          ),
+          outputTables: upsertById(p.outputTables, table),
+        };
+      });
+      const node = get().pipeline?.nodes.find((n) => n.id === nodeId);
+      const table = tableFromDataset(dataset, nodeId, node?.outputs[0] ?? dataset.id);
+      set((s) => ({
+        tables: upsertById(s.tables, table),
+        activeTableId: table.id,
+        notice: `"${dataset.name}" is now the source for ${node?.title ?? "this node"}.`,
+      }));
+    },
+
+    setNodeScenario: (nodeId, scenarioTag) => {
+      const tag = scenarioTag ?? undefined;
+      const match = tag ? get().datasets.find((d) => d.scenarioTags?.includes(tag)) : undefined;
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) =>
+          n.id === nodeId
+            ? { ...n, source: { ...(n.source ?? {}), mode: n.source?.mode ?? "input_studio", scenario: tag } }
+            : n,
+        ),
+      }));
+      if (match) get().useDatasetForNode(nodeId, match.id);
+      else
+        set({
+          notice: tag
+            ? `Scenario "${tag}" set. Generate a dataset for it in Input Studio.`
+            : "Scenario cleared.",
+        });
+    },
+
+    applyFieldMapping: (mapping) => {
+      mutate((p) => ({
+        ...p,
+        fieldMappings: [
+          mapping,
+          ...p.fieldMappings.filter(
+            (m) =>
+              !(
+                m.sourceField === mapping.sourceField &&
+                m.targetField === mapping.targetField &&
+                m.fromNodeId === mapping.fromNodeId
+              ),
+          ),
+        ],
+      }));
+      set({ notice: `Mapped \`${mapping.sourceField}\` → \`${mapping.targetField}\`.` });
+    },
+
+    bindTakeTableToSource: (nodeId, tableId, snapshot) => {
+      const table =
+        get().tables.find((t) => t.id === tableId) ??
+        get().pipeline?.outputTables.find((t) => t.id === tableId);
+      if (!table) return;
+      let datasetId: string | undefined;
+      if (snapshot) {
+        const ds = datasetFromTable(table, {
+          name: `${table.name} snapshot`,
+          mode: "previous_take",
+          takeName: get().pipeline?.name,
+        });
+        get().upsertDataset(ds);
+        datasetId = ds.id;
+      }
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) =>
+          n.id === nodeId
+            ? {
+                ...n,
+                source: {
+                  ...(n.source ?? {}),
+                  mode: "previous_take",
+                  tableName: table.name,
+                  takeName: get().pipeline?.name,
+                  snapshot,
+                  datasetId: datasetId ?? n.source?.datasetId,
+                },
+              }
+            : n,
+        ),
+      }));
+      set({
+        notice: snapshot
+          ? `Snapshotted \`${table.name}\` as a dataset for this source.`
+          : `Bound \`${table.name}\` as a Previous Take source.`,
+      });
+    },
 
     generate: async (description) => {
       if (!description.trim() || get().generating) return;

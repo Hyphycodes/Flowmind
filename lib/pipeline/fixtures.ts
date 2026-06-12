@@ -5,8 +5,12 @@ import {
   type Pipeline,
   type RunTrace,
 } from "./schema";
+import type { Dataset } from "@/lib/datasets/schema";
 import { newId } from "./validate";
-import { TEAM_TEMPLATES } from "./teamFixtures";
+import { JARVIS_PLACES_DATASET, TEAM_TEMPLATES } from "./teamFixtures";
+
+/** Reusable Seed Datasets bundled with the app (shown in the Dataset Library). */
+export const FIXTURE_DATASETS: Dataset[] = [JARVIS_PLACES_DATASET];
 
 const P = (raw: unknown): Pipeline => pipelineSchema.parse(raw);
 const R = (raw: unknown): RunTrace => runTraceSchema.parse(raw);

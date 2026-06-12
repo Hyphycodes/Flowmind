@@ -6,6 +6,7 @@ import { usePipelineStore } from "@/store/pipelineStore";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
 import { cn } from "@/lib/ui/cn";
+import { SourceLayer } from "./SourceLayer";
 
 export function NodeInspector() {
   const pipeline = usePipelineStore((s) => s.pipeline);
@@ -83,6 +84,10 @@ export function NodeInspector() {
           <ChipRow label="Inputs" items={node.inputs} accent={accent} dim />
           <ChipRow label="Outputs" items={node.outputs} accent={accent} />
         </div>
+      )}
+
+      {(node.source || node.layer === "source" || node.type === "input" || node.type === "tool") && (
+        <SourceLayer node={node} />
       )}
 
       {node.team && node.team.agents.length > 0 && (

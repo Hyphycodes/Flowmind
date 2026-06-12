@@ -1,4 +1,5 @@
 import { generateInputDataset } from "@/lib/datasets/inputStudio";
+import { hasAnthropicKey } from "@/lib/ai/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -21,8 +22,15 @@ export async function POST(req: Request) {
       prompt,
       columns: Array.isArray(b?.columns) ? b.columns : undefined,
       rowCount: typeof b?.rowCount === "number" ? b.rowCount : undefined,
+      qualityTarget: b?.qualityTarget,
+      generationStyle: b?.generationStyle,
+      scenarioTags: Array.isArray(b?.scenarioTags) ? b.scenarioTags : undefined,
+      requiredFields: Array.isArray(b?.requiredFields) ? b.requiredFields : undefined,
+      examples: Array.isArray(b?.examples) ? b.examples : undefined,
+      existingRows: Array.isArray(b?.existingRows) ? b.existingRows : undefined,
+      datasetId: typeof b?.datasetId === "string" ? b.datasetId : undefined,
     });
-    return Response.json({ dataset });
+    return Response.json({ dataset, modelAvailable: hasAnthropicKey() });
   } catch (err) {
     return Response.json({ error: (err as Error)?.message ?? "Generation failed" }, { status: 500 });
   }

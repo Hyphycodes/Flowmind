@@ -33,6 +33,8 @@ function graphOf(p: Pipeline) {
     outputTables: p.outputTables,
     uiBindings: p.uiBindings,
     datasetIds: p.datasetIds,
+    fieldMappings: p.fieldMappings,
+    scenarioSets: p.scenarioSets,
     version: p.version,
     blueprint: p.blueprint,
     realityMeter: p.realityMeter,
@@ -194,6 +196,7 @@ export async function listDatasets(): Promise<Dataset[]> {
   if (error || !data) return [];
   return data.flatMap((r: any) => {
     try {
+      const meta = r.meta ?? {};
       return [
         datasetSchema.parse({
           id: r.id,
@@ -205,6 +208,11 @@ export async function listDatasets(): Promise<Dataset[]> {
           sourcePrompt: r.source_prompt ?? undefined,
           version: r.version ?? 1,
           qualityScore: r.quality_score ?? undefined,
+          qualityTarget: meta.qualityTarget ?? undefined,
+          generationStyle: meta.generationStyle ?? undefined,
+          scenarioTags: meta.scenarioTags ?? [],
+          requiredFields: meta.requiredFields ?? [],
+          connectedNodeId: meta.connectedNodeId ?? undefined,
           connectedPipelines: r.connected_pipelines ?? [],
           createdAt: r.created_at,
           updatedAt: r.updated_at,
@@ -219,21 +227,29 @@ export async function listDatasets(): Promise<Dataset[]> {
 export async function saveDataset(d: Dataset): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  const { error } = await sb.from("datasets").upsert(
-    {
-      id: d.id,
-      name: d.name,
-      description: d.description,
-      mode: d.mode,
-      schema: d.schema,
-      rows: d.rows,
-      source_prompt: d.sourcePrompt ?? null,
-      version: d.version,
-      quality_score: d.qualityScore ?? null,
-      connected_pipelines: d.connectedPipelines,
-    },
-    { onConflict: "id" },
-  );
+  const base = {
+    id: d.id,
+    name: d.name,
+    description: d.description,
+    mode: d.mode,
+    schema: d.schema,
+    rows: d.rows,
+    source_prompt: d.sourcePrompt ?? null,
+    version: d.version,
+    quality_score: d.qualityScore ?? null,
+    connected_pipelines: d.connectedPipelines,
+  };
+  const meta = {
+    qualityTarget: d.qualityTarget ?? null,
+    generationStyle: d.generationStyle ?? null,
+    scenarioTags: d.scenarioTags,
+    requiredFields: d.requiredFields,
+    connectedNodeId: d.connectedNodeId ?? null,
+  };
+  // Try with the meta column (migration 0003); fall back if it isn't applied yet.
+  const withMeta = await sb.from("datasets").upsert({ ...base, meta }, { onConflict: "id" });
+  if (!withMeta.error) return true;
+  const { error } = await sb.from("datasets").upsert(base, { onConflict: "id" });
   return !error;
 }
 

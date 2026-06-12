@@ -182,6 +182,14 @@ function readmeMd(p: Pipeline): string {
     ``,
     `Team Nodes run internal agents, emit Handoff Packets, and save agent/team traces. Use Packet View plus the trace files to debug what changed between teams.`,
     ``,
+    `## Input Studio & the Source Layer`,
+    ``,
+    `Source nodes don't use "mock data" — they use the **Input Studio**: deliberate, reusable`,
+    `**Generated Datasets** (Seed Datasets) with an inferred schema and a quality score. Each source`,
+    `declares a **Source Mode** (Input Studio, Live API, Previous Take, …). **Data Contracts** check`,
+    `that a source provides the fields the next team expects; **field mappings** reconcile differing`,
+    `names (e.g. \`parking_notes\` → \`parking\`); **Scenario Sets** swap datasets per test condition.`,
+    ``,
     `## Files`,
     ``,
     `- \`pipeline.json\` — the validated pipeline graph (nodes, edges, tables, UI bindings).`,
@@ -189,6 +197,10 @@ function readmeMd(p: Pipeline): string {
     `- \`mock-data.json\` — seeded inputs, tables, and final output.`,
     `- \`run-pipeline.ts\` — standalone topological runner.`,
     `- \`spec.md\` — human-readable architecture spec.`,
+    `- \`datasets/*.json\` + \`dataset-schemas.json\` — Input Studio Generated Datasets and their schemas.`,
+    `- \`source-configs.json\` — each source node's mode + dataset/tool binding.`,
+    `- \`data-contracts.json\` and \`field-mappings.json\` — source/target field contracts and mappings.`,
+    `- \`scenario-sets.json\` — reusable testing scenarios.`,
     `- \`traces/team-runs.json\` and \`traces/agent-runs.json\` — Crew Room execution records.`,
     `- \`packets/handoff-packets.json\` and \`packets/field-drift-warnings.json\` — packet timeline plus drift warnings.`,
     ``,
@@ -216,6 +228,24 @@ function specMd(p: Pipeline): string {
     `## UI bindings`,
     ``,
     bindings || "_No UI bindings._",
+    ``,
+    `## Source Layer`,
+    ``,
+    `Source nodes declare where their data comes from via a Source Mode ` +
+      `(Input Studio, Live API, Previous Take, Upload, Manual, Memory, Webhook, Database).`,
+    ...(p.nodes.filter((n) => n.source).length
+      ? p.nodes
+          .filter((n) => n.source)
+          .map(
+            (n) =>
+              `- **${n.title}** — \`${n.source?.mode}\`${n.source?.datasetName ? ` · dataset: ${n.source.datasetName}` : ""}${n.source?.scenario ? ` · scenario: ${n.source.scenario}` : ""}`,
+          )
+      : ["- _No source nodes._"]),
+    ``,
+    `Data Contracts (\`data-contracts.json\`) declare what each source provides and what the next`,
+    `team expects; field mappings (\`field-mappings.json\`) reconcile differing field names; scenario`,
+    `sets (\`scenario-sets.json\`) swap datasets for different test conditions. Datasets and their`,
+    `inferred schemas live in \`datasets/*.json\` + \`dataset-schemas.json\`.`,
     ``,
     `## Schema`,
     ``,
@@ -336,6 +366,47 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
     const ds = zip.folder("datasets");
     for (const d of datasets) ds?.file(`${d.id}.json`, JSON.stringify(d, null, 2));
   }
+
+  // ── Source Layer manifest (Input Studio / contracts / mappings / scenarios) ──
+  zip.file(
+    "dataset-schemas.json",
+    JSON.stringify(
+      datasets.map((d) => ({
+        id: d.id,
+        name: d.name,
+        mode: d.mode,
+        rowCount: d.rows.length,
+        qualityScore: d.qualityScore ?? null,
+        scenarioTags: d.scenarioTags,
+        requiredFields: d.requiredFields,
+        schema: d.schema,
+      })),
+      null,
+      2,
+    ),
+  );
+  zip.file(
+    "source-configs.json",
+    JSON.stringify(
+      pipeline.nodes
+        .filter((n) => n.source)
+        .map((n) => ({ nodeId: n.id, title: n.title, ...n.source })),
+      null,
+      2,
+    ),
+  );
+  zip.file(
+    "data-contracts.json",
+    JSON.stringify(
+      pipeline.edges
+        .filter((e) => e.contract)
+        .map((e) => ({ id: e.id, fromNodeId: e.source, toNodeId: e.target, ...e.contract })),
+      null,
+      2,
+    ),
+  );
+  zip.file("field-mappings.json", JSON.stringify(pipeline.fieldMappings ?? [], null, 2));
+  zip.file("scenario-sets.json", JSON.stringify(pipeline.scenarioSets ?? [], null, 2));
 
   zip.file("ui-bindings.json", JSON.stringify(pipeline.uiBindings, null, 2));
   zip.file("handoff-packets.json", JSON.stringify(run?.packets ?? [], null, 2));

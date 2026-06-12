@@ -16,7 +16,31 @@ export function CommandBar() {
   const generating = usePipelineStore((s) => s.generating);
   const notice = usePipelineStore((s) => s.notice);
   const setNotice = usePipelineStore((s) => s.setNotice);
+  const pipeline = usePipelineStore((s) => s.pipeline);
+  const selectedNodeId = usePipelineStore((s) => s.selectedNodeId);
+  const openInputStudio = usePipelineStore((s) => s.openInputStudio);
+  const setPanelTab = usePipelineStore((s) => s.setPanelTab);
+  const setSourceMode = usePipelineStore((s) => s.setSourceMode);
   const [text, setText] = useState("");
+
+  const selectedNode = selectedNodeId ? pipeline?.nodes.find((n) => n.id === selectedNodeId) : undefined;
+  const isSource = Boolean(
+    selectedNode &&
+      (selectedNode.source ||
+        selectedNode.layer === "source" ||
+        selectedNode.type === "input" ||
+        selectedNode.type === "tool"),
+  );
+  const sourceChips: { label: string; run: () => void }[] = selectedNode
+    ? [
+        { label: "Generate stronger inputs", run: () => openInputStudio(selectedNode.id) },
+        { label: "Open Dataset Library", run: () => setPanelTab("data") },
+        selectedNode.source?.mode === "live_api"
+          ? { label: "Switch to Input Studio", run: () => setSourceMode(selectedNode.id, "input_studio") }
+          : { label: "Switch to Live API", run: () => setSourceMode(selectedNode.id, "live_api") },
+        { label: "Use a previous Take", run: () => setSourceMode(selectedNode.id, "previous_take") },
+      ]
+    : [];
 
   useEffect(() => {
     if (!notice) return;
@@ -68,16 +92,26 @@ export function CommandBar() {
           </button>
         </form>
         <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-          {CHIPS.map((c) => (
-            <button
-              key={c}
-              onClick={() => submit(c)}
-              disabled={generating}
-              className="rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
-            >
-              {c}
-            </button>
-          ))}
+          {isSource
+            ? sourceChips.map((c) => (
+                <button
+                  key={c.label}
+                  onClick={c.run}
+                  className="flex items-center gap-1 rounded-full border border-violet/30 bg-violet/[0.06] px-3 py-1 text-xs text-violet transition hover:bg-violet/[0.12]"
+                >
+                  <Sparkles size={11} /> {c.label}
+                </button>
+              ))
+            : CHIPS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => submit(c)}
+                  disabled={generating}
+                  className="rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
+                >
+                  {c}
+                </button>
+              ))}
         </div>
       </div>
     </div>

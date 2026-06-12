@@ -116,13 +116,30 @@ export type Team = z.infer<typeof teamSchema>;
 
 /* ── Source config ───────────────────────────────────────────────────── */
 
+/** Input Studio generation controls (shared by datasets + source nodes). */
+export const QUALITY_TARGETS = ["realistic", "high_quality", "edge_cases", "production_like"] as const;
+export type QualityTarget = (typeof QUALITY_TARGETS)[number];
+
+export const GENERATION_STYLES = ["api_like", "user_like", "business_like", "edge_case_pack"] as const;
+export type GenerationStyle = (typeof GENERATION_STYLES)[number];
+
 export const sourceConfigSchema = z.object({
   mode: z.enum(SOURCE_MODES).default("input_studio"),
   datasetId: z.string().optional(),
+  datasetName: z.string().optional(),
+  /** dataset/source to fall back to when a live tool has no key */
+  fallbackDatasetId: z.string().optional(),
   toolId: z.string().optional(),
   endpoint: z.string().optional(),
   prompt: z.string().optional(),
   rowCount: z.number().optional(),
+  /** active Scenario Set tag driving which dataset this source uses */
+  scenario: z.string().optional(),
+  /** Previous Take binding (mode = "previous_take") */
+  takeId: z.string().optional(),
+  takeName: z.string().optional(),
+  tableName: z.string().optional(),
+  snapshot: z.boolean().optional(),
   config: z.record(z.any()).optional(),
 });
 export type SourceConfig = z.infer<typeof sourceConfigSchema>;
@@ -166,13 +183,49 @@ export const contractFieldSchema = z.object({
 });
 export type ContractField = z.infer<typeof contractFieldSchema>;
 
+export const contractWarningSchema = z.object({
+  message: z.string(),
+  severity: z.enum(["info", "warning", "error"]).default("warning"),
+  field: z.string().optional(),
+});
+export type ContractWarning = z.infer<typeof contractWarningSchema>;
+
 export const dataContractSchema = z.object({
   expects: z.array(contractFieldSchema).default([]),
   provides: z.array(contractFieldSchema).default([]),
   status: z.enum(["ok", "warning", "error", "unknown"]).default("unknown"),
+  warnings: z.array(contractWarningSchema).default([]),
   notes: z.string().optional(),
+  lastCheckedAt: z.string().optional(),
 });
 export type DataContract = z.infer<typeof dataContractSchema>;
+
+/* ── Field mappings + scenario sets (Source Layer) ───────────────────── */
+
+export const fieldMappingSchema = z.object({
+  id: z.string(),
+  fromNodeId: z.string().default(""),
+  toNodeId: z.string().default(""),
+  sourceField: z.string(),
+  targetField: z.string(),
+  transform: z
+    .enum(["none", "stringify", "number", "boolean", "date", "json", "custom"])
+    .default("none"),
+  customTransform: z.string().optional(),
+});
+export type FieldMapping = z.infer<typeof fieldMappingSchema>;
+
+/** A reusable testing scenario (e.g. "Date night in Chicago"). Drives which
+ *  dataset a Source node uses via matching scenario tags. */
+export const scenarioSetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().default(""),
+  tag: z.string().default(""),
+  prompt: z.string().optional(),
+  datasetIds: z.array(z.string()).default([]),
+});
+export type ScenarioSet = z.infer<typeof scenarioSetSchema>;
 
 export const pipelineEdgeSchema = z.object({
   id: z.string(),
@@ -337,6 +390,10 @@ export const pipelineSchema = z.object({
   /** upgrade fields (optional) */
   version: z.number().optional(),
   datasetIds: z.array(z.string()).default([]),
+  /** field-level mappings the Source Layer suggests/applies between nodes */
+  fieldMappings: z.array(fieldMappingSchema).default([]),
+  /** reusable testing scenarios for the Source Layer */
+  scenarioSets: z.array(scenarioSetSchema).default([]),
   blueprint: productDropSchema.optional(),
   realityMeter: realityMeterSchema.optional(),
   createdAt: z.string().default(() => new Date().toISOString()),

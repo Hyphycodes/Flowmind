@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { pipelineSchema } from "@/lib/pipeline/schema";
-import { getTemplate, instantiatePipeline } from "@/lib/pipeline/fixtures";
+import { FIXTURE_DATASETS, getTemplate, instantiatePipeline } from "@/lib/pipeline/fixtures";
 import { newId } from "@/lib/pipeline/validate";
 import { hasSupabase } from "@/lib/supabase/client";
 import {
@@ -20,9 +20,11 @@ import { PipelineCanvas } from "@/components/canvas/PipelineCanvas";
 import { CommandBar } from "@/components/command/CommandBar";
 import { NodeInspector } from "@/components/panels/NodeInspector";
 import { OutputPanel } from "@/components/panels/OutputPanel";
+import { InputStudioPanel } from "@/components/panels/InputStudioPanel";
 
 export function Builder() {
   const setActivePipeline = usePipelineStore((s) => s.setActivePipeline);
+  const hydrateDatasets = usePipelineStore((s) => s.hydrateDatasets);
   const pipeline = usePipelineStore((s) => s.pipeline);
   const [loading, setLoading] = useState(true);
   const booted = useRef(false);
@@ -44,6 +46,8 @@ export function Builder() {
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
+
+    void hydrateDatasets(FIXTURE_DATASETS);
 
     (async () => {
       const params = new URLSearchParams(window.location.search);
@@ -124,6 +128,7 @@ export function Builder() {
             {loading ? <CanvasLoading /> : empty ? <EmptyCanvas /> : <PipelineCanvas />}
             <NodeInspector />
             <CommandBar />
+            <InputStudioPanel />
           </div>
           <OutputPanel />
         </div>

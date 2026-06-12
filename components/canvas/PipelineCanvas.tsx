@@ -13,6 +13,8 @@ import {
 } from "@xyflow/react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { hexFor } from "@/lib/ui/colors";
+import { SOURCE_MODE_LABEL } from "@/lib/datasets/sourceModes";
+import { contractStatusColor } from "@/lib/contracts/check";
 import { AgentNode } from "./AgentNode";
 import { DataEdge } from "./DataEdge";
 import { FloatingCanvasControls } from "./FloatingCanvasControls";
@@ -22,6 +24,7 @@ const edgeTypes = { data: DataEdge };
 
 function Flow() {
   const pipeline = usePipelineStore((s) => s.pipeline);
+  const datasets = usePipelineStore((s) => s.datasets);
   const selectedNodeId = usePipelineStore((s) => s.selectedNodeId);
   const runStatus = usePipelineStore((s) => s.runStatus);
   const runningNodeId = usePipelineStore((s) => s.runningNodeId);
@@ -31,18 +34,32 @@ function Flow() {
 
   const statusSig = pipeline ? pipeline.nodes.map((n) => `${n.id}:${n.status}`).join("|") : "";
   const nodeList = pipeline?.nodes;
+  const datasetSig = datasets.map((d) => `${d.id}:${d.rows.length}:${d.qualityScore ?? ""}`).join("|");
 
   const nodes: Node[] = useMemo(() => {
     if (!pipeline) return [];
-    return pipeline.nodes.map((n) => ({
-      id: n.id,
-      type: "agent",
-      position: n.position,
-      data: n as unknown as Record<string, unknown>,
-      selected: n.id === selectedNodeId,
-    }));
+    return pipeline.nodes.map((n) => {
+      let sourceBadge: { label: string; meta: string } | undefined;
+      if (n.source) {
+        const ds = n.source.datasetId ? datasets.find((d) => d.id === n.source!.datasetId) : undefined;
+        const rows = ds ? ds.rows.length : n.source.rowCount;
+        const quality = ds?.qualityScore;
+        const parts = [
+          rows != null ? `${rows} rows` : null,
+          quality != null ? `${quality}%` : null,
+        ].filter(Boolean);
+        sourceBadge = { label: SOURCE_MODE_LABEL[n.source.mode], meta: parts.join(" · ") };
+      }
+      return {
+        id: n.id,
+        type: "agent",
+        position: n.position,
+        data: { ...(n as unknown as Record<string, unknown>), sourceBadge },
+        selected: n.id === selectedNodeId,
+      };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeList, statusSig, selectedNodeId]);
+  }, [nodeList, statusSig, selectedNodeId, datasetSig]);
 
   const edges: Edge[] = useMemo(() => {
     if (!pipeline) return [];
@@ -55,12 +72,21 @@ function Flow() {
         (statusOf.get(e.source) === "success" ||
           e.target === runningNodeId ||
           statusOf.get(e.target) === "running");
+      const cStatus = e.contract?.status;
+      const contractColor =
+        cStatus === "ok"
+          ? contractStatusColor("passing")
+          : cStatus === "warning"
+            ? contractStatusColor("warning")
+            : cStatus === "error"
+              ? contractStatusColor("failing")
+              : undefined;
       return {
         id: e.id,
         source: e.source,
         target: e.target,
         type: "data",
-        data: { color, label: e.label, animated },
+        data: { color, label: e.label, animated, contractColor },
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
