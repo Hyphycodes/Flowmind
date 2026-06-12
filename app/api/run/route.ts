@@ -272,6 +272,8 @@ export async function POST(req: Request) {
           packetWarnings,
           agentRuns,
           teamRuns,
+          toolTraces: [],
+          modelBattles: [],
           latencyMs: Date.now() - Date.parse(startedAt),
           costUsd: teamRuns.reduce((sum, trace) => sum + (trace.costUsd ?? 0), 0),
         };
@@ -289,6 +291,8 @@ export async function POST(req: Request) {
           packetWarnings,
           agentRuns,
           teamRuns,
+          toolTraces: [],
+          modelBattles: [],
           finalOutput,
           latencyMs: Date.now() - Date.parse(startedAt),
         };

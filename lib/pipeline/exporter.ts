@@ -11,7 +11,9 @@ import type {
   TeamRunTrace,
 } from "./schema";
 import type { Dataset } from "@/lib/datasets/schema";
-import { getTool } from "@/lib/tools/registry";
+import { MODELS } from "@/lib/models/providers";
+import { recommendModelForAgent, recommendModelForNode } from "@/lib/models/recommend";
+import { getTool, TOOLS } from "@/lib/tools/registry";
 
 export type ExportRun = {
   steps?: unknown;
@@ -24,6 +26,24 @@ export type ExportRun = {
   runTrace?: RunTrace | null;
   datasets?: Dataset[];
 };
+
+const ENV_EXAMPLE = [
+  "ANTHROPIC_API_KEY=",
+  "OPENAI_API_KEY=",
+  "GOOGLE_GENERATIVE_AI_API_KEY=",
+  "VERCEL_AI_GATEWAY_API_KEY=",
+  "OPENROUTER_API_KEY=",
+  "GROQ_API_KEY=",
+  "CEREBRAS_API_KEY=",
+  "MISTRAL_API_KEY=",
+  "GOOGLE_PLACES_API_KEY=",
+  "SERPAPI_API_KEY=",
+  "RENTCAST_API_KEY=",
+  "ATTOM_API_KEY=",
+  "NEXT_PUBLIC_SUPABASE_URL=",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY=",
+  "SUPABASE_SERVICE_ROLE_KEY=",
+].join("\n");
 
 function clientBlueprintMd(p: Pipeline): string {
   const b = p.blueprint;
@@ -182,6 +202,10 @@ function readmeMd(p: Pipeline): string {
     ``,
     `Team Nodes run internal agents, emit Handoff Packets, and save agent/team traces. Use Packet View plus the trace files to debug what changed between teams.`,
     ``,
+    `## Models and tools`,
+    ``,
+    `Every node can auto-pick a model, use a manual model, or keep a fallback chain. Tool attachments declare which APIs a node may use and which Input Studio dataset to fall back to when an API key is missing.`,
+    ``,
     `## Input Studio & the Source Layer`,
     ``,
     `Source nodes don't use "mock data" — they use the **Input Studio**: deliberate, reusable`,
@@ -201,6 +225,9 @@ function readmeMd(p: Pipeline): string {
     `- \`source-configs.json\` — each source node's mode + dataset/tool binding.`,
     `- \`data-contracts.json\` and \`field-mappings.json\` — source/target field contracts and mappings.`,
     `- \`scenario-sets.json\` — reusable testing scenarios.`,
+    `- \`models/model-configs.json\`, \`models/model-selections.json\`, \`models/model-recommendations.json\` — model router setup.`,
+    `- \`tools/tool-definitions.json\`, \`tools/tool-attachments.json\`, \`tools/tool-traces.json\` — tool registry setup and run usage.`,
+    `- \`env.example\` — environment variable names to configure; no secret values are exported.`,
     `- \`traces/team-runs.json\` and \`traces/agent-runs.json\` — Crew Room execution records.`,
     `- \`packets/handoff-packets.json\` and \`packets/field-drift-warnings.json\` — packet timeline plus drift warnings.`,
     ``,
@@ -255,6 +282,20 @@ function specMd(p: Pipeline): string {
     `Team traces capture agent runs, consultation summaries, disagreements, merge decisions, final team output, and emitted Handoff Packets.`,
     `Debug a bad output by checking \`traces/team-runs.json\`, then the matching \`traces/agent-runs.json\`, then \`packets/field-drift-warnings.json\`.`,
     ``,
+    `## Models and tools`,
+    ``,
+    ...p.nodes.map((n) => {
+      const rec = recommendModelForNode({
+        nodeId: n.id,
+        nodeType: n.type,
+        role: n.role || n.title,
+        structuredOutputRequired: true,
+        toolUsageRequired: Boolean(n.source?.toolId || n.toolAttachments.length),
+        wiredOnly: true,
+      });
+      return `- **${n.title}** model: \`${n.modelSelection?.primaryModelId ?? n.model ?? rec.recommendedModelId}\` · ${rec.reason}`;
+    }),
+    ``,
   ].join("\n");
 }
 
@@ -276,6 +317,8 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
             role: n.role,
             prompt: n.prompt,
             model: n.model,
+            modelSelection: n.modelSelection ?? null,
+            toolAttachments: n.toolAttachments,
             inputs: n.inputs,
             outputs: n.outputs,
             team: n.team ?? null,
@@ -315,6 +358,8 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
           inputs: n.inputs,
           outputs: n.outputs,
           isTeam: !!n.team,
+          modelSelection: n.modelSelection ?? null,
+          toolAttachments: n.toolAttachments,
         })),
         edges: pipeline.edges.map((e) => ({
           source: e.source,
@@ -351,7 +396,14 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
   }
 
   const toolIds = Array.from(
-    new Set(pipeline.nodes.map((n) => n.source?.toolId).filter(Boolean) as string[]),
+    new Set(
+      pipeline.nodes.flatMap((n) => [
+        n.source?.toolId,
+        ...n.toolAttachments.map((a) => a.toolId),
+        ...(n.team?.toolAttachments.map((a) => a.toolId) ?? []),
+        ...(n.team?.agents.flatMap((a) => a.toolAttachments.map((attachment) => attachment.toolId)) ?? []),
+      ]).filter(Boolean) as string[],
+    ),
   );
   if (toolIds.length) {
     const tools = zip.folder("tools");
@@ -407,6 +459,80 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
   );
   zip.file("field-mappings.json", JSON.stringify(pipeline.fieldMappings ?? [], null, 2));
   zip.file("scenario-sets.json", JSON.stringify(pipeline.scenarioSets ?? [], null, 2));
+
+  const models = zip.folder("models");
+  models?.file("model-configs.json", JSON.stringify(MODELS, null, 2));
+  models?.file(
+    "model-selections.json",
+    JSON.stringify(
+      pipeline.nodes.map((node) => ({
+        nodeId: node.id,
+        nodeTitle: node.title,
+        selection: node.modelSelection ?? null,
+        teamSelection: node.team?.modelSelection ?? null,
+        agentSelections: node.team?.agents.map((agent) => ({
+          agentId: agent.id,
+          agentName: agent.name,
+          selection: agent.modelSelection ?? null,
+        })) ?? [],
+      })),
+      null,
+      2,
+    ),
+  );
+  models?.file(
+    "model-recommendations.json",
+    JSON.stringify(
+      pipeline.nodes.map((node) => ({
+        nodeId: node.id,
+        nodeTitle: node.title,
+        recommendation: recommendModelForNode({
+          nodeId: node.id,
+          nodeType: node.type,
+          role: node.role || node.title,
+          structuredOutputRequired: true,
+          toolUsageRequired: Boolean(node.source?.toolId || node.toolAttachments.length),
+          wiredOnly: true,
+        }),
+        agentRecommendations: node.team?.agents.map((agent) =>
+          recommendModelForAgent({
+            nodeId: node.id,
+            agentId: agent.id,
+            nodeType: node.type,
+            role: agent.role || node.role,
+            structuredOutputRequired: true,
+            toolUsageRequired: Boolean(agent.toolAttachments.length || node.toolAttachments.length),
+            wiredOnly: true,
+          }),
+        ) ?? [],
+      })),
+      null,
+      2,
+    ),
+  );
+
+  const toolFolder = zip.folder("tools");
+  toolFolder?.file("tool-definitions.json", JSON.stringify(TOOLS, null, 2));
+  toolFolder?.file(
+    "tool-attachments.json",
+    JSON.stringify(
+      pipeline.nodes.map((node) => ({
+        nodeId: node.id,
+        nodeTitle: node.title,
+        attachments: node.toolAttachments,
+        teamAttachments: node.team?.toolAttachments ?? [],
+        agentAttachments: node.team?.agents.map((agent) => ({
+          agentId: agent.id,
+          agentName: agent.name,
+          attachments: agent.toolAttachments,
+        })) ?? [],
+      })),
+      null,
+      2,
+    ),
+  );
+  toolFolder?.file("tool-traces.json", JSON.stringify(run?.runTrace?.toolTraces ?? [], null, 2));
+  zip.file("env.example", ENV_EXAMPLE + "\n");
 
   zip.file("ui-bindings.json", JSON.stringify(pipeline.uiBindings, null, 2));
   zip.file("handoff-packets.json", JSON.stringify(run?.packets ?? [], null, 2));

@@ -82,6 +82,78 @@ export type ComponentType = (typeof COMPONENT_TYPES)[number];
 
 export const positionSchema = z.object({ x: z.number(), y: z.number() });
 
+/* ── Models + tools (selection, attachments, traces) ─────────────────── */
+
+export const MODEL_SELECTION_MODES = ["auto", "manual", "inherit", "fallback_chain"] as const;
+export type ModelSelectionMode = (typeof MODEL_SELECTION_MODES)[number];
+
+export const modelSelectionSchema = z.object({
+  mode: z.enum(MODEL_SELECTION_MODES).default("auto"),
+  primaryModelId: z.string().optional(),
+  fallbackModelIds: z.array(z.string()).default([]),
+  recommendedModelId: z.string().optional(),
+  reason: z.string().optional(),
+  temperature: z.number().optional(),
+  maxTokens: z.number().optional(),
+  structuredOutputRequired: z.boolean().optional(),
+  toolCallingRequired: z.boolean().optional(),
+  visionRequired: z.boolean().optional(),
+});
+export type ModelSelection = z.infer<typeof modelSelectionSchema>;
+
+export const toolAttachmentSchema = z.object({
+  id: z.string(),
+  toolId: z.string(),
+  nodeId: z.string().optional(),
+  agentId: z.string().optional(),
+  mode: z.enum(["available", "required", "disabled"]).default("available"),
+  inputMapping: z.record(z.string()).default({}),
+  outputMapping: z.record(z.string()).default({}),
+  useWhen: z.string().optional(),
+  fallbackSourceMode: z.enum(SOURCE_MODES).optional(),
+  fallbackDatasetId: z.string().optional(),
+});
+export type ToolAttachment = z.infer<typeof toolAttachmentSchema>;
+
+export const toolTraceSchema = z.object({
+  id: z.string(),
+  toolId: z.string(),
+  toolName: z.string(),
+  nodeId: z.string().optional(),
+  agentId: z.string().optional(),
+  input: z.any().optional(),
+  output: z.any().optional(),
+  status: z.enum(["success", "error", "skipped", "fallback_used"]),
+  error: z.string().optional(),
+  latencyMs: z.number().optional(),
+  costEstimate: z.number().optional(),
+  createdAt: z.string(),
+});
+export type ToolTrace = z.infer<typeof toolTraceSchema>;
+
+export const modelBattleSchema = z.object({
+  id: z.string(),
+  nodeId: z.string().optional(),
+  agentId: z.string().optional(),
+  candidateModelIds: z.array(z.string()).default([]),
+  input: z.any().optional(),
+  results: z
+    .array(
+      z.object({
+        modelId: z.string(),
+        output: z.any().optional(),
+        score: z.number().optional(),
+        costEstimate: z.number().optional(),
+        latencyMs: z.number().optional(),
+        notes: z.string().optional(),
+      }),
+    )
+    .default([]),
+  winnerModelId: z.string().optional(),
+  createdAt: z.string(),
+});
+export type ModelBattle = z.infer<typeof modelBattleSchema>;
+
 /* ── Brain: agents + teams ───────────────────────────────────────────── */
 
 /** A single agent. A node has one today; `team.agents` makes a node a crew. */
@@ -91,6 +163,8 @@ export const agentConfigSchema = z.object({
   role: z.string().default(""),
   prompt: z.string().default(""),
   model: z.string().default("claude-sonnet-4-6"),
+  modelSelection: modelSelectionSchema.optional(),
+  toolAttachments: z.array(toolAttachmentSchema).default([]),
   /** crew-room runtime/metadata (all optional) */
   isLead: z.boolean().optional(),
   muted: z.boolean().optional(),
@@ -104,6 +178,8 @@ export type AgentConfig = z.infer<typeof agentConfigSchema>;
 
 export const teamSchema = z.object({
   strategy: z.enum(TEAM_STRATEGIES).default("sequential"),
+  modelSelection: modelSelectionSchema.optional(),
+  toolAttachments: z.array(toolAttachmentSchema).default([]),
   agents: z.array(agentConfigSchema).default([]),
   /** agent id of the lead / synthesizer / chair */
   lead: z.string().optional(),
@@ -156,6 +232,8 @@ export const pipelineNodeSchema = z.object({
   prompt: z.string().default(""),
   model: z.string().default("claude-sonnet-4-6"),
   fallbackModel: z.string().optional(),
+  modelSelection: modelSelectionSchema.optional(),
+  toolAttachments: z.array(toolAttachmentSchema).default([]),
   color: z.enum(ACCENTS).optional(),
   position: positionSchema.default({ x: 0, y: 0 }),
   /** keys this node consumes / emits (drive the input/output chips + tables) */
@@ -390,6 +468,9 @@ export const pipelineSchema = z.object({
   /** upgrade fields (optional) */
   version: z.number().optional(),
   datasetIds: z.array(z.string()).default([]),
+  defaultModelSelection: modelSelectionSchema.optional(),
+  toolAttachments: z.array(toolAttachmentSchema).default([]),
+  modelBattles: z.array(modelBattleSchema).default([]),
   /** field-level mappings the Source Layer suggests/applies between nodes */
   fieldMappings: z.array(fieldMappingSchema).default([]),
   /** reusable testing scenarios for the Source Layer */
@@ -420,6 +501,7 @@ export const agentRunTraceSchema = z.object({
   prompt: z.string().default(""),
   structuredOutput: z.any().optional(),
   toolCalls: z.array(z.any()).default([]),
+  toolTraces: z.array(toolTraceSchema).default([]),
   confidence: z.number().optional(),
   warnings: z.array(z.string()).default([]),
   errors: z.array(z.string()).default([]),
@@ -447,6 +529,7 @@ export const teamRunTraceSchema = z.object({
   status: z.enum(NODE_STATUS),
   input: z.any().optional(),
   agentRuns: z.array(agentRunTraceSchema).default([]),
+  toolTraces: z.array(toolTraceSchema).default([]),
   consultationSummary: z.string().default(""),
   disagreements: z.array(z.string()).default([]),
   mergeDecision: z.string().default(""),
@@ -496,6 +579,8 @@ export const runTraceSchema = z.object({
   packetWarnings: z.array(packetWarningSchema).default([]),
   agentRuns: z.array(agentRunTraceSchema).default([]),
   teamRuns: z.array(teamRunTraceSchema).default([]),
+  toolTraces: z.array(toolTraceSchema).default([]),
+  modelBattles: z.array(modelBattleSchema).default([]),
   takeId: z.string().optional(),
   costUsd: z.number().optional(),
   latencyMs: z.number().optional(),

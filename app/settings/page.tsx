@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
+import { ProviderStatus } from "@/components/models/ProviderStatus";
+import { ToolRegistry } from "@/components/tools/ToolRegistry";
 
 type Status = { anthropic: boolean; model: string; supabase: boolean };
 
@@ -24,6 +26,9 @@ export default function SettingsPage() {
           <Row label="Model" value={s?.model || "—"} />
           <StatusRow label="Supabase" ok={!!s?.supabase} okText="Connected" badText="Local only" />
         </Card>
+
+        <ProviderStatus />
+        <ToolRegistry />
 
         {s && !s.anthropic && (
           <div className="rounded-xl border border-gold/30 bg-gold/[0.06] p-4 text-[12.5px] leading-relaxed text-ink-dim">

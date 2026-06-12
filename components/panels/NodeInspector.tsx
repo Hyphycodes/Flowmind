@@ -1,16 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createElement, useState } from "react";
 import { Loader2, Mic, MicOff, Play, RotateCw, Users, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
 import { cn } from "@/lib/ui/cn";
 import { SourceLayer } from "./SourceLayer";
+import { ModelPicker } from "@/components/models/ModelPicker";
+import { ToolAttachPanel } from "@/components/tools/ToolAttachPanel";
 
 export function NodeInspector() {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const selectedId = usePipelineStore((s) => s.selectedNodeId);
+  const node = pipeline?.nodes.find((n) => n.id === selectedId) ?? null;
+
+  if (!node) return null;
+  return <NodeInspectorPanel key={node.id} node={node} />;
+}
+
+function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof usePipelineStore.getState>["pipeline"]>["nodes"][number] }) {
   const selectNode = usePipelineStore((s) => s.selectNode);
   const setNodePrompt = usePipelineStore((s) => s.setNodePrompt);
   const runPipeline = usePipelineStore((s) => s.runPipeline);
@@ -22,17 +31,10 @@ export function NodeInspector() {
   const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
   const patchNode = usePipelineStore((s) => s.patchNode);
 
-  const node = pipeline?.nodes.find((n) => n.id === selectedId) ?? null;
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(node.prompt ?? "");
 
-  useEffect(() => {
-    setPrompt(node?.prompt ?? "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
-
-  if (!node) return null;
   const accent = hexFor({ color: node.color, type: node.type });
-  const Icon = iconForNode(node);
+  const icon = iconForNode(node);
   const latestTeamTrace = [...teamRunTraces].reverse().find((t) => t.teamNodeId === node.id);
   const agentTraceFor = (agentId: string) =>
     [...agentRunTraces].reverse().find((t) => t.teamNodeId === node.id && t.agentId === agentId);
@@ -44,7 +46,7 @@ export function NodeInspector() {
           className="flex h-9 w-9 items-center justify-center rounded-xl"
           style={{ background: withAlpha(accent, 0.16), color: accent }}
         >
-          <Icon size={17} strokeWidth={1.9} />
+          {createElement(icon, { size: 17, strokeWidth: 1.9 })}
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-ink">{node.title}</div>
@@ -78,6 +80,17 @@ export function NodeInspector() {
         <span className="text-ink-faint">Model</span>
         <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-mono text-ink-dim">{node.model}</span>
       </div>
+
+      <ModelPicker
+        node={node}
+        value={node.modelSelection}
+        onChange={(modelSelection, model) => patchNode(node.id, { modelSelection, model })}
+      />
+
+      <ToolAttachPanel
+        node={node}
+        onChange={(toolAttachments) => patchNode(node.id, { toolAttachments })}
+      />
 
       {(node.inputs.length > 0 || node.outputs.length > 0) && (
         <div className="mt-3 space-y-2">
@@ -168,6 +181,21 @@ export function NodeInspector() {
                   ) : (
                     <p className="mt-1 text-[10px] text-ink-faint">Sample/static crew member until this team runs.</p>
                   )}
+                  <ModelPicker
+                    node={node}
+                    agent={a}
+                    value={a.modelSelection}
+                    onChange={(modelSelection, model) =>
+                      patchNode(node.id, {
+                        team: {
+                          ...node.team!,
+                          agents: node.team!.agents.map((x) =>
+                            x.id === a.id ? { ...x, modelSelection, model } : x,
+                          ),
+                        },
+                      })
+                    }
+                  />
                 </div>
               );
             })}

@@ -67,9 +67,11 @@ additive + optional so existing pipelines stay valid.
 - **Input Studio / Datasets.** Deliberate, reusable seed datasets (NOT random mock):
   `lib/datasets/*`, `app/api/input-studio`. `node.source` declares the `InputSourceMode`.
 - **Data Contracts.** `edge.contract` declares expected/produced fields for validation.
-- **Model providers.** `lib/models/*` — provider-agnostic registry + `recommendModel`.
-  Don't hardcode only Claude (Claude is the wired provider today).
-- **Tool/API registry.** `lib/tools/*` — declarative tool defs with mock fallbacks.
+- **Model providers.** `lib/models/*` — provider-agnostic registry, deterministic router,
+  model selections, provider status, and Flowmind AI wrappers. Don't hardcode only Claude
+  (Claude is the wired provider today; other providers are status/registry-ready).
+- **Tool/API registry.** `lib/tools/*` — declarative tool defs, status checks, attachments,
+  execution wrapper, and Input Studio/dataset fallbacks.
 - **Takes** (`takeSchema`), **Reality Meter** + **Product Drop** (on the pipeline),
   **Evaluator/Judge** dims (`lib/evals/*`).
 - **Export manifest.** `lib/pipeline/exporter.ts` adds `schema.json`, `crews/*`, `tools/*`,
@@ -102,9 +104,13 @@ client components carry `"use client"`.
 ## Env (`.env.local`)
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` — wired (Supabase project "Flowmind").
-- `ANTHROPIC_API_KEY` — **required** for generation + runs. Without it those return a
-  clear "missing key" response; seed templates + their example runs still demonstrate the UI.
+- `ANTHROPIC_API_KEY` — required for live Claude generation + model-backed runs. Without it,
+  generation falls back to templates and runs can use deterministic seeded output fallbacks.
 - `ANTHROPIC_MODEL` — optional, default `claude-sonnet-4-6`.
+- Optional provider/tool keys: `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`,
+  `VERCEL_AI_GATEWAY_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`,
+  `MISTRAL_API_KEY`, `GOOGLE_PLACES_API_KEY`, `SERPAPI_API_KEY`, `RENTCAST_API_KEY`,
+  `ATTOM_API_KEY`.
 
 ## Security note
 

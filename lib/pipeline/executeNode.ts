@@ -1,9 +1,11 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { anthropicModel } from "@/lib/ai/anthropic";
+import { getModelClient, resolveExecutionModel } from "@/lib/ai/client";
 import { analyzePacketFieldDrift } from "@/lib/packets/fieldDrift";
 import { buildPacket } from "@/lib/packets/packetUtils";
 import { estimateCost } from "@/lib/models/providers";
+import { getTool } from "@/lib/tools/registry";
+import { statusForTool } from "@/lib/tools/status";
 import {
   ACCENTS,
   type AgentConfig,
@@ -172,6 +174,69 @@ function usageFrom(result: unknown) {
   };
 }
 
+function toolContextFor(node: PipelineNode, agent?: AgentConfig): string {
+  const attachments: Array<{ toolId: string; mode: string; fallbackDatasetId?: string; useWhen?: string }> = [
+    ...(node.source?.toolId
+      ? [{ toolId: node.source.toolId, mode: "required", fallbackDatasetId: node.source.fallbackDatasetId }]
+      : []),
+    ...node.toolAttachments,
+    ...(node.team?.toolAttachments ?? []),
+    ...(agent?.toolAttachments ?? []),
+  ];
+  if (!attachments.length) return "No tools attached.";
+  return attachments
+    .map((attachment) => {
+      const tool = getTool(attachment.toolId);
+      if (!tool) return `${attachment.toolId}: unknown tool`;
+      const status = statusForTool(tool);
+      const fallback = attachment.fallbackDatasetId ?? tool.fallbackDatasetId ?? tool.mockDatasetId;
+      return [
+        `${tool.name} (${tool.category})`,
+        `mode: ${attachment.mode}`,
+        `status: ${status.status}`,
+        status.missingEnvVars.length ? `missing env: ${status.missingEnvVars.join(", ")}` : "ready",
+        fallback ? `fallback dataset: ${fallback}` : "",
+        attachment.useWhen ? `use when: ${attachment.useWhen}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+    })
+    .join("\n");
+}
+
+function resolveAgentModel(node: PipelineNode, agent: AgentConfig) {
+  return resolveExecutionModel(
+    agent.modelSelection,
+    {
+      nodeId: node.id,
+      agentId: agent.id,
+      nodeType: node.type,
+      role: agent.role || node.role,
+      structuredOutputRequired: true,
+      toolUsageRequired: Boolean(node.toolAttachments.length || node.team?.toolAttachments.length || agent.toolAttachments.length || node.source?.toolId),
+      visionRequired: agent.modelSelection?.visionRequired ?? node.modelSelection?.visionRequired,
+      costPreference: agent.role.toLowerCase().includes("classif") ? "low" : "medium",
+      speedPreference: agent.role.toLowerCase().includes("router") ? "high" : "medium",
+      wiredOnly: true,
+    },
+    node.team?.modelSelection ?? node.modelSelection,
+  );
+}
+
+function resolveNodeModel(node: PipelineNode) {
+  return resolveExecutionModel(node.modelSelection, {
+    nodeId: node.id,
+    nodeType: node.type,
+    role: node.role || node.title,
+    structuredOutputRequired: true,
+    toolUsageRequired: Boolean(node.toolAttachments.length || node.source?.toolId),
+    visionRequired: node.modelSelection?.visionRequired,
+    costPreference: node.type === "tool" || node.role.toLowerCase().includes("classif") ? "low" : "medium",
+    speedPreference: node.type === "tool" ? "high" : "medium",
+    wiredOnly: true,
+  });
+}
+
 function fallbackPacket(
   node: PipelineNode,
   ctx: ExecuteContext,
@@ -254,10 +319,11 @@ async function executeAgent(
   input: unknown,
 ): Promise<AgentRunTrace> {
   const started = new Date();
-  const modelId = agent.model || node.model;
+  const resolvedModel = resolveAgentModel(node, agent);
+  const modelId = resolvedModel.selectedModelId || agent.model || node.model;
   ctx.emit?.({ kind: "agent-start", teamNodeId: node.id, agentId: agent.id });
 
-  if (ctx.modelAvailable === false) {
+  if (ctx.modelAvailable === false || !resolvedModel.ready) {
     const trace: AgentRunTrace = {
       id: newId("agent_run"),
       runId: ctx.runId,
@@ -274,8 +340,13 @@ async function executeAgent(
       prompt: agent.prompt || node.prompt,
       structuredOutput: { fallback: true, upstreamTables: Object.keys(ctx.upstream) },
       toolCalls: [],
+      toolTraces: [],
       confidence: 0.58,
-      warnings: ["ANTHROPIC_API_KEY is not set; deterministic agent fallback used."],
+      warnings: [
+        "Selected model is not ready; deterministic agent fallback used.",
+        resolvedModel.reason,
+        ...resolvedModel.warnings,
+      ],
       errors: [],
       latencyMs: Date.now() - started.getTime(),
       startedAt: started.toISOString(),
@@ -287,7 +358,7 @@ async function executeAgent(
 
   try {
     const result = await generateObject({
-      model: anthropicModel(modelId),
+      model: getModelClient(modelId),
       schema: agentResultSchema,
       system:
         "You are an internal agent inside a Flowmind Team Node. Produce specific, decision-useful work for the team's chair. Do not emit placeholder text.",
@@ -296,6 +367,8 @@ async function executeAgent(
         `Team: ${node.title} (${node.team?.strategy ?? "single"})`,
         `Agent: ${agent.name || agent.id} — ${agent.role}`,
         `Agent task: ${agent.prompt || node.prompt || node.description || node.title}`,
+        `Model choice: ${modelId}. ${resolvedModel.reason}`,
+        `Available tools:\n${toolContextFor(node, agent)}`,
         `Pipeline inputs: ${JSON.stringify(ctx.mockInputs)}`,
         `Team input: ${JSON.stringify(input).slice(0, 9000)}`,
         "Return a concise output, a one-sentence summary, structured fields if useful, confidence, and any warnings.",
@@ -321,6 +394,7 @@ async function executeAgent(
       prompt: agent.prompt || node.prompt,
       structuredOutput: object.structuredOutput,
       toolCalls: [],
+      toolTraces: [],
       confidence: object.confidence,
       warnings: object.warnings,
       errors: [],
@@ -348,6 +422,7 @@ async function executeAgent(
       prompt: agent.prompt || node.prompt,
       structuredOutput: {},
       toolCalls: [],
+      toolTraces: [],
       warnings: [],
       errors: [(err as Error)?.message ?? "Agent failed"],
       latencyMs: Date.now() - started.getTime(),
@@ -423,10 +498,15 @@ async function synthesizeTeam(
     role: t.role,
     prompt: t.prompt,
     model: t.model,
+    toolAttachments: [],
   })), node);
   const chairModel = chair?.model || node.model;
+  const resolvedModel = chair
+    ? resolveAgentModel(node, chair)
+    : resolveNodeModel(node);
+  const synthesisModel = resolvedModel.selectedModelId || chairModel;
   const isOutput = node.type === "output";
-  if (ctx.modelAvailable === false) {
+  if (ctx.modelAvailable === false || !resolvedModel.ready) {
     const tables = seededTablesFor(node, ctx);
     return {
       object: {
@@ -439,7 +519,8 @@ async function synthesizeTeam(
         confidence: 0.58,
         warnings: [
           ...fallbackWarnings,
-          "ANTHROPIC_API_KEY is not set; deterministic team fallback used.",
+          "Selected model is not ready; deterministic team fallback used.",
+          resolvedModel.reason,
         ],
         final: deterministicFinal(node, tables),
       },
@@ -449,12 +530,13 @@ async function synthesizeTeam(
       model: chairModel,
       warnings: [
         ...fallbackWarnings,
-        "ANTHROPIC_API_KEY is not set; deterministic team fallback used.",
+        "Selected model is not ready; deterministic team fallback used.",
+        resolvedModel.reason,
       ],
     };
   }
   const result = await generateObject({
-    model: anthropicModel(chairModel),
+    model: getModelClient(synthesisModel),
     schema: teamSynthesisSchema,
     system:
       "You are the chair of a Flowmind Team Node. Merge internal agent work into a clean team output, output tables, and a concise decision record.",
@@ -462,6 +544,8 @@ async function synthesizeTeam(
       `Pipeline: ${ctx.pipelineName}`,
       `Team: ${node.title} (${node.team?.strategy ?? "single"})`,
       `Team task: ${node.prompt || node.description || node.title}`,
+      `Model choice: ${synthesisModel}. ${resolvedModel.reason}`,
+      `Available tools:\n${toolContextFor(node)}`,
       `Pipeline inputs: ${JSON.stringify(ctx.mockInputs)}`,
       `Upstream data: ${JSON.stringify(upstreamData(ctx)).slice(0, 7000)}`,
       `Agent traces: ${JSON.stringify(agentTraces.map((t) => ({ agent: t.agentName, role: t.role, output: t.output, summary: t.outputSummary, confidence: t.confidence, warnings: t.warnings }))).slice(0, 10000)}`,
@@ -483,7 +567,7 @@ async function synthesizeTeam(
     tables,
     final: isOutput ? object.final : undefined,
     usage: usageFrom(result),
-    model: chairModel,
+    model: synthesisModel,
     warnings: [...fallbackWarnings, ...object.warnings],
   };
 }
@@ -493,19 +577,20 @@ async function createTeamPacket(
   ctx: ExecuteContext,
   teamTrace: TeamRunTrace,
 ): Promise<HandoffPacket> {
-  if (ctx.modelAvailable === false) {
+  const resolvedModel = resolveNodeModel(node);
+  if (ctx.modelAvailable === false || !resolvedModel.ready) {
     return fallbackPacket(
       node,
       ctx,
       teamTrace.outputSummary,
       teamTrace.confidence ?? 0.58,
-      ["ANTHROPIC_API_KEY is not set; deterministic packet fallback used."],
+      ["Selected model is not ready; deterministic packet fallback used.", resolvedModel.reason],
     );
   }
 
   try {
     const result = await generateObject({
-      model: anthropicModel(node.model),
+      model: getModelClient(resolvedModel.selectedModelId || node.model),
       schema: packetDraftSchema,
       system:
         "Create a slim Flowmind Handoff Packet. It should be much smaller than raw agent outputs and useful to the downstream team.",
@@ -558,6 +643,7 @@ async function executeTeamNode(node: PipelineNode, ctx: ExecuteContext): Promise
       ...teamTraceBase,
       status: "error",
       agentRuns: [],
+      toolTraces: [],
       consultationSummary: "",
       disagreements: [],
       mergeDecision: "No active agents.",
@@ -583,6 +669,7 @@ async function executeTeamNode(node: PipelineNode, ctx: ExecuteContext): Promise
     ...teamTraceBase,
     status: traces.some((t) => t.status === "error") ? "error" : "success",
     agentRuns: traces,
+    toolTraces: traces.flatMap((trace) => trace.toolTraces),
     consultationSummary: synthesis.object.consultationSummary,
     disagreements: synthesis.object.disagreements,
     mergeDecision: synthesis.object.mergeDecision,
@@ -618,16 +705,19 @@ async function executeTeamNode(node: PipelineNode, ctx: ExecuteContext): Promise
 export async function executeNode(node: PipelineNode, ctx: ExecuteContext): Promise<ExecuteResult> {
   if (node.team) return executeTeamNode(node, ctx);
 
-  if (ctx.modelAvailable === false) {
+  const resolvedModel = resolveNodeModel(node);
+  const modelId = resolvedModel.selectedModelId || node.model;
+
+  if (ctx.modelAvailable === false || !resolvedModel.ready) {
     const tables = seededTablesFor(node, ctx);
     return {
-      summary: `${node.title} used deterministic seeded output because ANTHROPIC_API_KEY is not set.`,
+      summary: `${node.title} used deterministic seeded output because the selected model is not ready.`,
       tables,
       final: deterministicFinal(node, tables),
     };
   }
 
-  const model = anthropicModel(node.model);
+  const model = getModelClient(modelId);
   const expected = node.outputs.length ? node.outputs : [node.id];
   const isOutput = node.type === "output";
   const schema = isOutput ? outputNodeResultSchema : nodeResultSchema;
@@ -641,6 +731,8 @@ export async function executeNode(node: PipelineNode, ctx: ExecuteContext): Prom
     `Pipeline: ${ctx.pipelineName}`,
     `Node: ${node.title}${node.role ? ` — ${node.role}` : ""} (type: ${node.type})`,
     `Task: ${node.prompt || node.description || node.title}`,
+    `Model choice: ${modelId}. ${resolvedModel.reason}`,
+    `Available tools:\n${toolContextFor(node)}`,
     `Pipeline inputs: ${JSON.stringify(ctx.mockInputs)}`,
     `Upstream data: ${JSON.stringify(upstreamData(ctx)).slice(0, 7000)}`,
     `Produce these output tables (use exactly these names): ${expected.join(", ")}.`,

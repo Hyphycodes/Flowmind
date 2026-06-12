@@ -25,6 +25,67 @@ export type RunSummary = {
   createdAt: string;
 };
 
+type JsonRecord = Record<string, unknown>;
+
+type PipelineRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  graph: JsonRecord | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type RunRow = {
+  id: string;
+  pipeline_id: string | null;
+  status: string;
+  final_output?: JsonRecord | null;
+  trace?: JsonRecord | unknown[] | null;
+  tables?: unknown[] | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+};
+
+type DatasetRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  mode: string | null;
+  schema: unknown[] | null;
+  rows: unknown[] | null;
+  source_prompt: string | null;
+  version: number | null;
+  quality_score: number | null;
+  connected_pipelines: string[] | null;
+  meta: JsonRecord | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type TakeRow = {
+  id: string;
+  pipeline_id: string;
+  name: string;
+  trace: unknown;
+  model_selections: JsonRecord | null;
+  scores: JsonRecord | null;
+  cost_usd: number | null;
+  latency_ms: number | null;
+  notes: string | null;
+  created_at: string;
+};
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(record: JsonRecord | null | undefined, key: string, fallback: string) {
+  const value = record?.[key];
+  return typeof value === "string" ? value : fallback;
+}
+
 function graphOf(p: Pipeline) {
   return {
     nodes: p.nodes,
@@ -35,18 +96,22 @@ function graphOf(p: Pipeline) {
     datasetIds: p.datasetIds,
     fieldMappings: p.fieldMappings,
     scenarioSets: p.scenarioSets,
+    defaultModelSelection: p.defaultModelSelection,
+    toolAttachments: p.toolAttachments,
+    modelBattles: p.modelBattles,
     version: p.version,
     blueprint: p.blueprint,
     realityMeter: p.realityMeter,
-  };
+  } satisfies JsonRecord;
 }
 
-function rowToPipeline(row: any): Pipeline {
+function rowToPipeline(row: PipelineRow): Pipeline {
+  const graph = isRecord(row.graph) ? row.graph : {};
   return pipelineSchema.parse({
     id: row.id,
     name: row.name,
     description: row.description ?? "",
-    ...(row.graph ?? {}),
+    ...graph,
     runHistory: [],
     createdAt: row.created_at ?? new Date().toISOString(),
     updatedAt: row.updated_at ?? new Date().toISOString(),
@@ -62,12 +127,12 @@ export async function listPipelines(): Promise<PipelineSummary[]> {
     .eq("is_template", false)
     .order("updated_at", { ascending: false });
   if (error || !data) return [];
-  return data.map((r: any) => ({
+  return (data as PipelineRow[]).map((r) => ({
     id: r.id,
     name: r.name,
     description: r.description ?? "",
     nodeCount: Array.isArray(r.graph?.nodes) ? r.graph.nodes.length : 0,
-    updatedAt: r.updated_at,
+    updatedAt: r.updated_at ?? new Date().toISOString(),
   }));
 }
 
@@ -77,7 +142,7 @@ export async function getPipeline(id: string): Promise<Pipeline | null> {
   const { data, error } = await sb.from("pipelines").select("*").eq("id", id).maybeSingle();
   if (error || !data) return null;
   try {
-    return rowToPipeline(data);
+    return rowToPipeline(data as PipelineRow);
   } catch {
     return null;
   }
@@ -118,6 +183,8 @@ export async function saveRun(run: RunTrace): Promise<boolean> {
       packetWarnings: run.packetWarnings,
       agentRuns: run.agentRuns,
       teamRuns: run.teamRuns,
+      toolTraces: run.toolTraces,
+      modelBattles: run.modelBattles,
       takeId: run.takeId ?? null,
       costUsd: run.costUsd ?? null,
       latencyMs: run.latencyMs ?? null,
@@ -142,21 +209,24 @@ export async function getLatestRun(pipelineId: string): Promise<RunTrace | null>
     .maybeSingle();
   if (error || !data) return null;
   try {
-    const trace = data.trace;
+    const run = data as RunRow;
+    const trace = run.trace;
     const steps = Array.isArray(trace) ? trace : trace?.steps ?? [];
     return runTraceSchema.parse({
-      id: data.id,
-      pipelineId: data.pipeline_id,
-      status: data.status,
-      startedAt: data.started_at ?? undefined,
-      finishedAt: data.finished_at ?? undefined,
+      id: run.id,
+      pipelineId: run.pipeline_id,
+      status: run.status,
+      startedAt: run.started_at ?? undefined,
+      finishedAt: run.finished_at ?? undefined,
       steps,
-      tables: data.tables ?? [],
-      finalOutput: data.final_output ?? undefined,
+      tables: run.tables ?? [],
+      finalOutput: run.final_output ?? undefined,
       packets: Array.isArray(trace) ? [] : trace?.packets ?? [],
       packetWarnings: Array.isArray(trace) ? [] : trace?.packetWarnings ?? [],
       agentRuns: Array.isArray(trace) ? [] : trace?.agentRuns ?? [],
       teamRuns: Array.isArray(trace) ? [] : trace?.teamRuns ?? [],
+      toolTraces: Array.isArray(trace) ? [] : trace?.toolTraces ?? [],
+      modelBattles: Array.isArray(trace) ? [] : trace?.modelBattles ?? [],
       takeId: Array.isArray(trace) ? undefined : trace?.takeId ?? undefined,
       costUsd: Array.isArray(trace) ? undefined : trace?.costUsd ?? undefined,
       latencyMs: Array.isArray(trace) ? undefined : trace?.latencyMs ?? undefined,
@@ -175,11 +245,11 @@ export async function listRuns(limit = 40): Promise<RunSummary[]> {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error || !data) return [];
-  return data.map((r: any) => ({
+  return (data as RunRow[]).map((r) => ({
     id: r.id,
     pipelineId: r.pipeline_id,
     status: r.status,
-    title: r.final_output?.title ?? "Run",
+    title: stringField(r.final_output, "title", "Run"),
     createdAt: r.created_at,
   }));
 }
@@ -194,7 +264,7 @@ export async function listDatasets(): Promise<Dataset[]> {
     .select("*")
     .order("updated_at", { ascending: false });
   if (error || !data) return [];
-  return data.flatMap((r: any) => {
+  return (data as DatasetRow[]).flatMap((r) => {
     try {
       const meta = r.meta ?? {};
       return [
@@ -285,7 +355,7 @@ export async function listTakes(pipelineId?: string): Promise<Take[]> {
   if (pipelineId) q = q.eq("pipeline_id", pipelineId);
   const { data, error } = await q;
   if (error || !data) return [];
-  return data.flatMap((r: any) => {
+  return (data as TakeRow[]).flatMap((r) => {
     try {
       return [
         takeSchema.parse({
