@@ -19,7 +19,7 @@ import type { EvalResult } from "@/lib/evals/schema";
 import { newId } from "@/lib/pipeline/validate";
 import { MODELS } from "@/lib/models/providers";
 import { recommendModelForAgent, recommendModelForNode } from "@/lib/models/recommend";
-import { getTool, TOOLS } from "@/lib/tools/registry";
+import { TOOLS } from "@/lib/tools/registry";
 import { compareTakes, summarizeRunCost } from "@/lib/takes/build";
 import { generateProductDrop } from "@/lib/product/productDrop";
 import { calculateRealityMeter } from "@/lib/product/realityMeter";

@@ -62,16 +62,29 @@ Room traces, and Packet View still demonstrate the full UI.
 - **Output tables** are first-class. **UI bindings** map tables to preview components
   (metric cards / record list / summary). The right panel shows Final Output, Key Highlights,
   the tables (TanStack), and a live UI preview.
+- **Run modes & Takes.** Runs execute in a mode — `simulate` (datasets / deterministic),
+  `live` (real models + tools), or `hybrid`. Every full run becomes a **Take** (run trace +
+  model selections + cost + latency + eval scores); compare 2–5 Takes on quality vs. cost vs.
+  speed. Deterministic **evals** (`lib/evals`) score each run; cost/latency trace included.
+- **Product layer.** A **Product Drop** (name, pitch, target user, Source/Brain/Surface) and a
+  deterministic **Reality Meter** (buildability + missing APIs + fastest MVP) render in the
+  Product tab. **Remix** actions (make it premium/cheaper/smarter, add evaluator, …) produce a
+  reviewable proposal before anything is applied.
 - **Autosave** writes the graph to Supabase (`pipelines`); runs persist to `runs`.
-- **Export** downloads a zip: `pipeline.json`, `agents/*.json`, `mock-data.json`,
-  `run-pipeline.ts`, `README.md`, `spec.md`.
+- **Export** (`lib/export`) builds a multi-mode ZIP — **Developer Package, Client Blueprint,
+  Founder Brief, Runtime Package, Hosted API** — with a readiness **health check**, an
+  `export-manifest.json`, README/SPEC/.env.example, and a portable runtime. No secret values.
+- **Runtime / SDK.** `lib/runtime` is a portable, dependency-free pipeline runner (future
+  `@flowmind/sdk`). `POST /api/pipelines/[id]/run` runs a saved pipeline over HTTP.
 
 ## Supabase
 
-Schema lives in `supabase/migrations/` — `0001` (`pipelines` + `runs`) and `0002`
-(`datasets`, `takes`, `pipeline_versions`, `tools`, `model_configs`). **RLS is
-permissive** for the single-user V1 prototype — tighten the policies before exposing it
-publicly (this is the first follow-up when auth is added).
+Schema lives in `supabase/migrations/` — `0001` (`pipelines` + `runs`), `0002` (`datasets`,
+`takes`, `pipeline_versions`, `tools`, `model_configs`), `0003` (Input Studio dataset
+metadata), `0004` (model/tool registry), `0005` (Take eval scores), `0006` (`exports`
+history). The app runs fully without the later migrations — they only add persistence for
+optional metadata. **RLS is permissive** for the single-user V1 prototype — tighten the
+policies before exposing it publicly (the first follow-up when auth is added).
 
 ## Deploy (Vercel)
 
@@ -112,10 +125,25 @@ Key concepts:
   **Founder Brief**.
 
 Flagship fixture: **Jarvis Places Radar** — Source → Taste → Ranking → Planning → Composer
-teams with real handoff packets and a card-grid UI surface. This is why Flowmind exists.
+teams with real handoff packets, three sample Takes, and a recommendation-card UI surface.
+This is why Flowmind exists.
+
+## Template packs
+
+Templates are grouped into preset **packs** (`lib/pipeline/packs.ts`): Jarvis, Real Estate,
+Content Studio, Inbox Operator, Research Analyst, Sales Agent, and AI Stylist. The Templates
+page groups cards by pack with node/team/agent/table counts and a readiness score.
+
+## Docs
+
+- [`docs/PRODUCT_PRINCIPLES.md`](docs/PRODUCT_PRINCIPLES.md) — what to protect and why.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — subsystem map and where things live.
+- [`docs/EXPORT_FORMAT.md`](docs/EXPORT_FORMAT.md) — export modes + ZIP layout.
+- [`docs/TEMPLATE_PACKS.md`](docs/TEMPLATE_PACKS.md) — the packs and their templates.
 
 ## Scripts
 
 - `npm run dev` — dev server
 - `npm run build` — production build
+- `npm run typecheck` — `tsc --noEmit`
 - `npm run lint` — eslint

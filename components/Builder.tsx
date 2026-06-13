@@ -145,24 +145,65 @@ export function Builder() {
 
 function CanvasLoading() {
   return (
-    <div className="flow-canvas flex h-full w-full items-center justify-center">
+    <div className="flow-canvas flex h-full w-full flex-col items-center justify-center gap-3">
       <Loader2 className="animate-spin text-ink-faint" size={22} />
+      <span className="text-xs text-ink-faint">Loading your studio…</span>
     </div>
   );
 }
 
+const FIRST_RUN_IDEAS = [
+  "Jarvis-style recommendation engine",
+  "Real estate deal analyzer",
+  "Content repurposing studio",
+  "Inbox triage assistant",
+  "Sales lead qualifier",
+];
+
 function EmptyCanvas() {
+  const generate = usePipelineStore((s) => s.generate);
+  const generating = usePipelineStore((s) => s.generating);
+
   return (
     <div className="flow-canvas flex h-full w-full items-center justify-center">
-      <div className="-mt-16 max-w-md px-6 text-center">
+      <div className="-mt-20 w-full max-w-lg px-6 text-center">
         <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-white/[0.03]">
           <Sparkles className="text-violet" size={20} />
         </div>
-        <h1 className="font-display text-3xl italic text-ink">Compose your intelligence</h1>
-        <p className="mt-2 text-sm text-ink-dim">
-          Describe an AI system below and watch it become a runnable agent pipeline you can
-          see, test, and export.
+        <h1 className="font-display text-[34px] italic leading-tight text-ink">What are we building?</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-dim">
+          Describe an AI product. Flowmind creates the teams, source data, output tables, preview,
+          and a shippable blueprint.
         </p>
+
+        <div className="mt-5 flex flex-wrap justify-center gap-1.5">
+          {FIRST_RUN_IDEAS.map((idea) => (
+            <button
+              key={idea}
+              onClick={() => void generate(idea)}
+              disabled={generating}
+              className="rounded-full border border-line bg-white/[0.03] px-3 py-1.5 text-[12.5px] text-ink-dim transition hover:border-violet/40 hover:bg-violet/[0.08] hover:text-ink disabled:opacity-50"
+            >
+              {idea}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-5 flex items-center justify-center gap-2 text-[12px]">
+          <a
+            href="/?template=tpl-jarvis"
+            className="flex items-center gap-1.5 rounded-lg bg-violet px-3 py-1.5 font-medium text-white transition hover:bg-violet/90"
+          >
+            <Sparkles size={13} /> Open the Jarvis demo
+          </a>
+          <a
+            href="/templates"
+            className="rounded-lg border border-line-strong bg-white/[0.04] px-3 py-1.5 text-ink transition hover:bg-white/[0.1]"
+          >
+            Browse templates
+          </a>
+        </div>
+        <p className="mt-4 text-[11px] text-ink-faint">…or describe your own in the command bar below.</p>
       </div>
     </div>
   );

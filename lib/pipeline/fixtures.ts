@@ -619,6 +619,134 @@ const researchRun = R({
   },
 });
 
+/* ──────────────────────────── Sales Lead Qualifier ─────────────────────────── */
+
+const SALES_TABLES: OutputTable[] = [
+  {
+    id: "qualified_leads", name: "qualified_leads", sourceNodeId: "qualifier",
+    description: "Leads scored + tiered by fit and intent.",
+    columns: [
+      { key: "company", label: "Company", type: "text" },
+      { key: "contact", label: "Contact", type: "text" },
+      { key: "title", label: "Title", type: "text" },
+      { key: "fit", label: "Fit", type: "number" },
+      { key: "intent", label: "Intent", type: "number" },
+      { key: "tier", label: "Tier", type: "badge" },
+    ],
+    rows: [
+      { company: "Northwind Logistics", contact: "Dana Reyes", title: "VP Operations", fit: 92, intent: 78, tier: "A" },
+      { company: "Pelham Dental Group", contact: "Marcus Liu", title: "Practice Owner", fit: 84, intent: 81, tier: "A" },
+      { company: "Cedar & Co Realty", contact: "Priya Shah", title: "Managing Broker", fit: 79, intent: 64, tier: "B" },
+      { company: "Volt Fitness", contact: "Sam Okafor", title: "Founder", fit: 71, intent: 58, tier: "B" },
+      { company: "Tinsel Bakery", contact: "Lena Park", title: "Owner", fit: 55, intent: 40, tier: "C" },
+    ],
+  },
+  {
+    id: "email_drafts", name: "email_drafts", sourceNodeId: "writer",
+    description: "Personalized first-touch emails, awaiting approval.",
+    columns: [
+      { key: "to", label: "To", type: "text" },
+      { key: "subject", label: "Subject", type: "text" },
+      { key: "preview", label: "Preview", type: "text" },
+      { key: "status", label: "Status", type: "badge" },
+    ],
+    rows: [
+      { to: "Dana Reyes", subject: "Cutting Northwind's dispatch time", preview: "Saw you're scaling the Midwest lanes — teams like yours cut dispatch admin ~30% with…", status: "Needs approval" },
+      { to: "Marcus Liu", subject: "Fewer no-shows at Pelham Dental", preview: "Congrats on the second location. Practices your size usually recover 6–8 hrs/week by…", status: "Needs approval" },
+      { to: "Priya Shah", subject: "Faster lead follow-up for Cedar & Co", preview: "Brokerages with your listing volume lose deals to slow first response — here's the fix…", status: "Draft" },
+    ],
+  },
+  {
+    id: "followups", name: "followups", sourceNodeId: "planner",
+    description: "Scheduled next touches per lead.",
+    columns: [
+      { key: "contact", label: "Contact", type: "text" },
+      { key: "when", label: "When", type: "text" },
+      { key: "channel", label: "Channel", type: "badge" },
+      { key: "note", label: "Note", type: "text" },
+    ],
+    rows: [
+      { contact: "Dana Reyes", when: "in 2 days", channel: "Email", note: "If no reply, send case study." },
+      { contact: "Marcus Liu", when: "in 3 days", channel: "Call", note: "Reference 2nd-location growth." },
+      { contact: "Priya Shah", when: "next week", channel: "LinkedIn", note: "Warm via mutual connection." },
+    ],
+  },
+];
+
+export const salesPipeline = P({
+  id: "tpl-sales",
+  name: "Sales Lead Qualifier",
+  description: "A batch of leads → qualified + scored → enriched → personalized emails → CRM update + follow-ups behind an approval gate.",
+  blueprint: {
+    name: "Sales Lead Qualifier",
+    pitch: "Turn a raw lead list into tiered, enriched, ready-to-send outreach.",
+    targetUser: "Founders and SDRs doing outbound without a big ops team.",
+    vibeTags: ["sharp", "personal", "pipeline-ready"],
+    coreValue: "Qualify, enrich, and draft outreach for a lead list in one pass.",
+    workflowSummary: "Leads → qualify + score → enrich → write emails → CRM + follow-ups.",
+    keyDataObjects: ["qualified_leads", "email_drafts", "followups"],
+    uiSurfaces: ["Lead queue", "Email drafts", "Follow-up plan"],
+    missingApis: ["CRM API (HubSpot/Salesforce)", "Email send API", "Enrichment API (Clearbit/Apollo)"],
+    fastestMvpPath: "Use Input Studio leads + manual CRM paste; wire CRM + enrichment later.",
+    monetization: "Per-seat for SDRs; usage-based on enriched leads.",
+  },
+  nodes: [
+    { id: "input", type: "input", layer: "source", title: "Lead Batch", subtitle: "Raw leads", description: "A batch of inbound or list leads to work.", color: "cyan", outputs: ["leads"], position: { x: 40, y: 320 } },
+    { id: "qualifier", type: "evaluator", layer: "brain", title: "Lead Qualifier", subtitle: "Score + tier", description: "Scores leads on fit and intent, assigns A/B/C tiers.", role: "Qualification engine", prompt: "Score each lead on fit and intent (0-100) and assign a tier. Return company, contact, title, fit, intent, tier.", color: "gold", inputs: ["leads"], outputs: ["qualified_leads"], evalDimensions: ["correctness", "relevance", "actionability"], position: { x: 360, y: 320 } },
+    { id: "enrichment", type: "tool", layer: "source", title: "Enrichment", subtitle: "Add signals", description: "Enriches top leads with company + role signals (live API or Input Studio).", color: "blue", inputs: ["qualified_leads"], outputs: ["enriched"], position: { x: 690, y: 140 }, source: { mode: "input_studio", prompt: "company + role enrichment signals for B2B leads", rowCount: 20, fallbackDatasetId: undefined } },
+    { id: "writer", type: "agent", layer: "brain", title: "Email Writer", subtitle: "Personalize", description: "Writes a personalized first-touch email per qualified lead.", role: "Outbound copywriter", prompt: "Write a concise, personalized first-touch email for each A/B lead. Return to, subject, preview, status.", color: "violet", inputs: ["qualified_leads", "enriched"], outputs: ["email_drafts"], position: { x: 690, y: 460 } },
+    { id: "planner", type: "agent", layer: "brain", title: "Follow-up Planner", subtitle: "Plan touches", description: "Plans the next touch per lead by channel + timing.", role: "Cadence planner", prompt: "Plan a follow-up per lead (contact, when, channel, note).", color: "teal", inputs: ["qualified_leads"], outputs: ["followups"], position: { x: 1010, y: 200 } },
+    { id: "crm", type: "output", layer: "surface", title: "CRM + Approval", subtitle: "Approve & sync", description: "Holds drafts for approval, then syncs to CRM (tool placeholder).", role: "Approval gate", prompt: "Summarize what's queued and what needs approval before syncing to the CRM.", color: "pink", inputs: ["email_drafts", "followups"], outputs: ["crm_updates"], position: { x: 1010, y: 460 } },
+  ],
+  edges: [
+    { id: "se1", source: "input", target: "qualifier", dataKey: "leads" },
+    { id: "se2", source: "qualifier", target: "enrichment", dataKey: "qualified_leads" },
+    { id: "se3", source: "qualifier", target: "writer", dataKey: "qualified_leads" },
+    { id: "se4", source: "enrichment", target: "writer", dataKey: "enriched" },
+    { id: "se5", source: "qualifier", target: "planner", dataKey: "qualified_leads" },
+    { id: "se6", source: "writer", target: "crm", dataKey: "email_drafts" },
+    { id: "se7", source: "planner", target: "crm", dataKey: "followups" },
+  ],
+  mockInputs: [
+    { key: "leads", label: "Leads", value: "5 inbound: logistics VP, dental owner, realty broker, gym founder, bakery owner." },
+    { key: "offer", label: "Offer", value: "AI ops assistant that cuts admin time" },
+    { key: "icp", label: "ICP", value: "SMB operators, 5–50 staff, ops-heavy" },
+  ],
+  outputTables: SALES_TABLES,
+  uiBindings: [
+    { id: "sb-leads", tableId: "qualified_leads", componentType: "recordList", title: "Lead Queue", position: 0, fields: ["company", "tier", "fit", "intent"] },
+    { id: "sb-mail", tableId: "email_drafts", componentType: "summaryCard", title: "Top Draft", position: 1, fields: ["to", "subject", "preview"] },
+    { id: "sb-follow", tableId: "followups", componentType: "recordList", title: "Follow-ups", position: 2, fields: ["contact", "when", "channel"] },
+  ],
+});
+
+const salesRun = R({
+  id: "run-sales-example",
+  pipelineId: "tpl-sales",
+  status: "success",
+  startedAt: ISO(11),
+  finishedAt: ISO(10),
+  steps: [
+    { nodeId: "input", title: "Lead Batch", status: "success", durationMs: 80, summary: "Loaded 5 leads." },
+    { nodeId: "qualifier", title: "Lead Qualifier", status: "success", durationMs: 1300, summary: "2 A, 2 B, 1 C." },
+    { nodeId: "enrichment", title: "Enrichment", status: "success", durationMs: 1100, summary: "Enriched top 4 leads." },
+    { nodeId: "writer", title: "Email Writer", status: "success", durationMs: 1600, summary: "Drafted 3 emails." },
+    { nodeId: "planner", title: "Follow-up Planner", status: "success", durationMs: 700, summary: "Planned 3 follow-ups." },
+    { nodeId: "crm", title: "CRM + Approval", status: "success", durationMs: 240, summary: "2 drafts await approval." },
+  ],
+  tables: SALES_TABLES,
+  finalOutput: {
+    title: "Lead Workup",
+    summary: "5 leads qualified (2 A-tier), top 4 enriched, 3 personalized emails drafted, and 3 follow-ups planned. 2 drafts are waiting on your approval before CRM sync.",
+    highlights: [
+      { label: "Leads", value: "5", accent: "cyan" },
+      { label: "A-tier", value: "2", accent: "gold" },
+      { label: "Drafts", value: "3", accent: "violet" },
+      { label: "Follow-ups", value: "3", accent: "teal" },
+    ],
+  },
+});
+
 /* ──────────────────────────────── registry ─────────────────────────────────── */
 
 export type Template = {
@@ -663,6 +791,14 @@ export const TEMPLATES: Template[] = [
     keywords: ["research", "market", "competitor", "intelligence", "analysis", "report", "thesis"],
     pipeline: researchPipeline,
     exampleRun: researchRun,
+  },
+  {
+    id: "tpl-sales",
+    label: "Sales Lead Qualifier",
+    blurb: "Leads → qualify + score → enrich → personalized emails → CRM.",
+    keywords: ["sales", "lead", "outbound", "crm", "qualify", "enrichment", "email", "sdr", "pipeline"],
+    pipeline: salesPipeline,
+    exampleRun: salesRun,
   },
   ...TEAM_TEMPLATES,
 ];

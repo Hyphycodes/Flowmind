@@ -6,10 +6,11 @@ import { usePipelineStore } from "@/store/pipelineStore";
 import { EXPORT_MODES } from "@/lib/export/schema";
 
 const CHIPS = [
+  "Jarvis-style recommendation engine",
   "Real estate deal analyzer",
   "Content repurposer",
-  "Inbox assistant",
-  "Market research engine",
+  "Inbox triage assistant",
+  "Sales lead qualifier",
 ];
 
 /** Maps a natural-language command to a remix action id (deterministic foundation). */
@@ -40,16 +41,27 @@ export function CommandBar() {
   const explain = usePipelineStore((s) => s.explain);
   const openExport = usePipelineStore((s) => s.openExport);
   const runExport = usePipelineStore((s) => s.runExport);
+  const rerunTeam = usePipelineStore((s) => s.rerunTeam);
   const [text, setText] = useState("");
 
   const selectedNode = selectedNodeId ? pipeline?.nodes.find((n) => n.id === selectedNodeId) : undefined;
+  const isTeam = Boolean(selectedNode?.team && (selectedNode.team.agents.length ?? 0) > 0);
   const isSource = Boolean(
     selectedNode &&
+      !isTeam &&
       (selectedNode.source ||
         selectedNode.layer === "source" ||
         selectedNode.type === "input" ||
         selectedNode.type === "tool"),
   );
+  const teamChips: { label: string; run: () => void }[] = selectedNode
+    ? [
+        { label: "Make this team smarter", run: () => startRemix("make_smarter") },
+        { label: "Add an evaluator", run: () => startRemix("add_evaluator") },
+        { label: "Re-run this team", run: () => void rerunTeam(selectedNode.id) },
+        { label: "Compare Takes", run: () => setPanelTab("takes") },
+      ]
+    : [];
   const sourceChips: { label: string; run: () => void }[] = selectedNode
     ? [
         { label: "Generate stronger inputs", run: () => openInputStudio(selectedNode.id) },
@@ -60,6 +72,7 @@ export function CommandBar() {
         { label: "Use a previous Take", run: () => setSourceMode(selectedNode.id, "previous_take") },
       ]
     : [];
+  const contextChips = isTeam ? teamChips : isSource ? sourceChips : null;
 
   useEffect(() => {
     if (!notice) return;
@@ -124,6 +137,11 @@ export function CommandBar() {
             <X size={12} />
           </button>
         </div>
+      ) : generating ? (
+        <div className="pointer-events-auto flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-ink-dim glass-strong fm-fade-up">
+          <Loader2 size={12} className="animate-spin text-violet" />
+          Designing teams, source data, and the product preview…
+        </div>
       ) : null}
 
       <div className="pointer-events-auto w-full max-w-2xl">
@@ -151,8 +169,8 @@ export function CommandBar() {
           </button>
         </form>
         <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-          {isSource
-            ? sourceChips.map((c) => (
+          {contextChips
+            ? contextChips.map((c) => (
                 <button
                   key={c.label}
                   onClick={c.run}

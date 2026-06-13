@@ -72,13 +72,27 @@ additive + optional so existing pipelines stay valid.
   (Claude is the wired provider today; other providers are status/registry-ready).
 - **Tool/API registry.** `lib/tools/*` — declarative tool defs, status checks, attachments,
   execution wrapper, and Input Studio/dataset fallbacks.
-- **Takes** (`takeSchema`), **Reality Meter** + **Product Drop** (on the pipeline),
-  **Evaluator/Judge** dims (`lib/evals/*`).
-- **Export manifest.** `lib/pipeline/exporter.ts` adds `schema.json`, `crews/*`, `tools/*`,
-  `datasets/*`, `ui-bindings.json`, `handoff-packets.json`, `CLIENT_BLUEPRINT.md`,
-  `FOUNDER_BRIEF.md` on top of the developer files.
-- **Persistence.** `supabase/migrations/0002_*` adds `datasets`, `takes`,
-  `pipeline_versions`, `tools`, `model_configs`. Use migrations, never hand-hack the DB.
+- **Execution / Takes / Evals (Prompt 05).** Runs have an `ExecutionMode`
+  (`simulate`/`live`/`hybrid`); `simulate` forces deterministic/dataset-backed output. Every
+  full run becomes a `Take` (additive fields on `takeSchema`). `lib/evals/runEval.ts` scores
+  runs deterministically; `lib/takes/build.ts` builds Takes + comparisons + cost summaries.
+  Takes UI = the right-panel "Takes" tab.
+- **Product layer (Prompt 06).** `lib/product/*` — deterministic `generateProductDrop`,
+  `calculateRealityMeter`, `generateProductBrief`, `explainProductBlueprint`, and the
+  `remix` system (propose-then-apply; never mutate the pipeline blindly). Product objects
+  persist inside the pipeline `graph` jsonb (like `blueprint`/`realityMeter`). UI = "Product"
+  tab + `RemixProposalModal`. Preview renderers incl. scoreCard/recommendationCards/actionChips
+  with "powered by <table>" labels.
+- **Export / Runtime (Prompt 07).** `lib/export/*` (`createExportBundle`) builds a multi-mode
+  ZIP (developer / client_blueprint / founder_brief / runtime / api) in a documented folder
+  layout with a health check + `export-manifest.json`; `lib/pipeline/exporter.ts` is now a thin
+  wrapper. `lib/runtime/*` is the portable, dependency-free SDK; `POST /api/pipelines/[id]/run`
+  runs a saved pipeline. **Never export secret values.**
+- **Template packs (Prompt 08).** `lib/pipeline/packs.ts` groups templates into 7 packs;
+  the Templates page renders pack-grouped rich cards. Demo data must stay realistic — no lorem.
+- **Persistence.** `supabase/migrations/` runs `0001`–`0006`. Later migrations are additive +
+  optional (saveDataset/saveTake/saveExport degrade gracefully without them). Use migrations,
+  never hand-hack the DB.
 
 ## Stack
 
