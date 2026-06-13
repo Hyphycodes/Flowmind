@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { AlertTriangle, Braces, Download, Loader2, Play, Plus, Route, Type } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { exportPipeline } from "@/lib/pipeline/exporter";
 import { packetTimeline } from "@/lib/packets/packetUtils";
 import { ACCENT_HEX, isAccent } from "@/lib/ui/colors";
 import { cn } from "@/lib/ui/cn";
@@ -68,40 +67,11 @@ function OutputTab() {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const tables = usePipelineStore((s) => s.tables);
   const finalOutput = usePipelineStore((s) => s.finalOutput);
-  const activeRunTrace = usePipelineStore((s) => s.activeRunTrace);
-  const handoffPackets = usePipelineStore((s) => s.handoffPackets);
-  const packetWarnings = usePipelineStore((s) => s.packetWarnings);
-  const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
-  const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
-  const datasets = usePipelineStore((s) => s.datasets);
-  const takes = usePipelineStore((s) => s.takes);
   const connectToUI = usePipelineStore((s) => s.connectToUI);
   const setConnectToUI = usePipelineStore((s) => s.setConnectToUI);
   const setNotice = usePipelineStore((s) => s.setNotice);
+  const openExport = usePipelineStore((s) => s.openExport);
   const [jsonMode, setJsonMode] = useState(false);
-
-  const onExport = async () => {
-    if (!pipeline) return;
-    const pipelineDatasets = datasets.filter(
-      (d) =>
-        pipeline.datasetIds.includes(d.id) ||
-        (d.connectedNodeId && pipeline.nodes.some((n) => n.id === d.connectedNodeId)),
-    );
-    await exportPipeline(pipeline, {
-      tables,
-      finalOutput,
-      packets: handoffPackets,
-      packetWarnings,
-      teamRuns: teamRunTraces,
-      agentRuns: agentRunTraces,
-      toolTraces: activeRunTrace?.toolTraces,
-      runTrace: activeRunTrace,
-      datasets: pipelineDatasets,
-      takes,
-      evalResults: activeRunTrace?.evalResults,
-    });
-    setNotice("Exported pipeline files (.zip)");
-  };
 
   return (
     <div className="space-y-5">
@@ -180,11 +150,11 @@ function OutputTab() {
       </section>
 
       <button
-        onClick={() => void onExport()}
+        onClick={openExport}
         disabled={!pipeline}
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-line-strong bg-white/[0.04] py-2.5 text-[13px] font-medium text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
       >
-        <Download size={15} /> Export pipeline (.zip)
+        <Download size={15} /> Export…
       </button>
     </div>
   );

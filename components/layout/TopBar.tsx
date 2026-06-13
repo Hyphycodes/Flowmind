@@ -12,7 +12,6 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { exportPipeline } from "@/lib/pipeline/exporter";
 import { cn } from "@/lib/ui/cn";
 
 export function TopBar() {
@@ -22,14 +21,9 @@ export function TopBar() {
   const saveStatus = usePipelineStore((s) => s.saveStatus);
   const renamePipeline = usePipelineStore((s) => s.renamePipeline);
   const togglePanel = usePipelineStore((s) => s.togglePanel);
-  const tables = usePipelineStore((s) => s.tables);
-  const finalOutput = usePipelineStore((s) => s.finalOutput);
-  const datasets = usePipelineStore((s) => s.datasets);
-  const takes = usePipelineStore((s) => s.takes);
-  const activeRunTrace = usePipelineStore((s) => s.activeRunTrace);
   const executionMode = usePipelineStore((s) => s.executionMode);
   const setExecutionMode = usePipelineStore((s) => s.setExecutionMode);
-  const setNotice = usePipelineStore((s) => s.setNotice);
+  const openExport = usePipelineStore((s) => s.openExport);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -58,25 +52,6 @@ export function TopBar() {
   const commit = () => {
     if (draft.trim()) renamePipeline(draft.trim());
     setEditing(false);
-  };
-
-  const onShare = async () => {
-    if (!pipeline) return;
-    const pipelineDatasets = datasets.filter(
-      (d) =>
-        pipeline.datasetIds.includes(d.id) ||
-        (d.connectedNodeId && pipeline.nodes.some((n) => n.id === d.connectedNodeId)),
-    );
-    await exportPipeline(pipeline, {
-      tables,
-      finalOutput,
-      datasets: pipelineDatasets,
-      takes,
-      runTrace: activeRunTrace,
-      evalResults: activeRunTrace?.evalResults,
-      toolTraces: activeRunTrace?.toolTraces,
-    });
-    setNotice("Exported pipeline files (.zip)");
   };
 
   return (
@@ -145,11 +120,12 @@ export function TopBar() {
 
         <button
           type="button"
-          onClick={() => void onShare()}
-          title="Export & share pipeline files (.zip)"
-          className="flex items-center gap-1.5 rounded-lg border border-line bg-white/[0.02] px-3 py-1.5 text-sm text-ink-dim transition hover:bg-white/5 hover:text-ink"
+          onClick={openExport}
+          disabled={!pipeline}
+          title="Export — developer package, client blueprint, founder brief, runtime, API"
+          className="flex items-center gap-1.5 rounded-lg border border-line bg-white/[0.02] px-3 py-1.5 text-sm text-ink-dim transition hover:bg-white/5 hover:text-ink disabled:opacity-50"
         >
-          <Share2 size={15} /> Share
+          <Share2 size={15} /> Export
         </button>
 
         <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet to-pink text-xs font-semibold text-white">

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
+import { EXPORT_MODES } from "@/lib/export/schema";
 
 const CHIPS = [
   "Real estate deal analyzer",
@@ -37,6 +38,8 @@ export function CommandBar() {
   const setSourceMode = usePipelineStore((s) => s.setSourceMode);
   const startRemix = usePipelineStore((s) => s.startRemix);
   const explain = usePipelineStore((s) => s.explain);
+  const openExport = usePipelineStore((s) => s.openExport);
+  const runExport = usePipelineStore((s) => s.runExport);
   const [text, setText] = useState("");
 
   const selectedNode = selectedNodeId ? pipeline?.nodes.find((n) => n.id === selectedNodeId) : undefined;
@@ -71,6 +74,15 @@ export function CommandBar() {
     // Deterministic intent routing: remix / product commands act on the current
     // pipeline; everything else generates a new one.
     const lower = v.toLowerCase();
+
+    // Export intents (independent of the imperative-verb gate below).
+    if (pipeline && /\bexport\b|bounce everything|client blueprint|founder brief|implementation plan|developer package/.test(lower)) {
+      setText("");
+      if (/bounce everything|export all|everything/.test(lower)) void runExport([...EXPORT_MODES]);
+      else openExport();
+      return;
+    }
+
     const isCommand = /^(make|add|turn|use|reduce|compress|split|show|explain|compare)\b/.test(lower) || /\bthis\b/.test(lower);
     if (pipeline && isCommand) {
       if (/explain/.test(lower)) {

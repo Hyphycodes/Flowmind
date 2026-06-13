@@ -7,6 +7,7 @@ import {
   type Take,
 } from "@/lib/pipeline/schema";
 import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
+import type { ExportManifest } from "@/lib/export/schema";
 import { getSupabase } from "./client";
 
 export type PipelineSummary = {
@@ -368,6 +369,20 @@ export async function saveTake(t: Take): Promise<boolean> {
   const rich = await sb.from("takes").insert({ ...base, ...extra });
   if (!rich.error) return true;
   const { error } = await sb.from("takes").insert(base);
+  return !error;
+}
+
+/* ── Export history (manifest only, not the ZIP) ─────────────────────── */
+
+export async function saveExport(manifest: ExportManifest): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("exports").insert({
+    pipeline_id: manifest.pipelineId,
+    mode: manifest.exportModes,
+    manifest,
+    health_check: manifest.healthCheck,
+  });
   return !error;
 }
 

@@ -22,6 +22,7 @@ import { NodeInspector } from "@/components/panels/NodeInspector";
 import { OutputPanel } from "@/components/panels/OutputPanel";
 import { InputStudioPanel } from "@/components/panels/InputStudioPanel";
 import { RemixProposalModal } from "@/components/product/RemixProposalModal";
+import { ExportDialog } from "@/components/export/ExportDialog";
 
 export function Builder() {
   const setActivePipeline = usePipelineStore((s) => s.setActivePipeline);
@@ -133,6 +134,7 @@ export function Builder() {
             <CommandBar />
             <InputStudioPanel />
             <RemixProposalModal />
+            <ExportDialog />
           </div>
           <OutputPanel />
         </div>

@@ -30,6 +30,7 @@ import {
   deleteDataset,
   listDatasets,
   saveDataset,
+  saveExport,
   saveRun,
   saveTake,
   upsertPipeline,
@@ -45,6 +46,9 @@ import { calculateRealityMeter } from "@/lib/product/realityMeter";
 import { generateProductBrief } from "@/lib/product/brief";
 import { buildRemixProposal } from "@/lib/product/remix";
 import { explainProductBlueprint, type ExplainAudience } from "@/lib/product/explain";
+import { downloadExportBundle, type ExportContext } from "@/lib/export/bundle";
+import { buildExportHealthCheck } from "@/lib/export/healthCheck";
+import type { ExportHealthCheck, ExportManifest, ExportMode } from "@/lib/export/schema";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
@@ -115,6 +119,12 @@ interface PipelineState {
   explainAudience: ExplainAudience;
   explainText: string | null;
 
+  /** Export system */
+  exportOpen: boolean;
+  exporting: boolean;
+  exportHealth: ExportHealthCheck | null;
+  lastExportManifest: ExportManifest | null;
+
   saveStatus: SaveStatus;
   generating: boolean;
   notice: string | null;
@@ -163,6 +173,11 @@ interface PipelineState {
   cancelRemix: () => void;
   addProductVariation: (variation: ProductVariation) => void;
   explain: (audience: ExplainAudience) => void;
+
+  /** Export system */
+  openExport: () => void;
+  closeExport: () => void;
+  runExport: (modes: ExportMode[]) => Promise<void>;
 
   generate: (description: string) => Promise<void>;
   runPipeline: (options?: RunOptions) => Promise<void>;
@@ -247,6 +262,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     remixing: false,
     explainAudience: "founder",
     explainText: null,
+    exportOpen: false,
+    exporting: false,
+    exportHealth: null,
+    lastExportManifest: null,
     saveStatus: "idle",
     generating: false,
     notice: null,
@@ -288,6 +307,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         remixProposedPipeline: null,
         remixing: false,
         explainText: null,
+        exportOpen: false,
+        exportHealth: null,
+        lastExportManifest: null,
         panelTab: "product",
         saveStatus: hasSupabase() ? "saved" : "local",
         notice: null,
@@ -616,6 +638,63 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       const reality = get().realityMeter;
       if (!p || !drop || !reality) return;
       set({ explainAudience: audience, explainText: explainProductBlueprint(p, drop, reality, audience) });
+    },
+
+    /* ── Export system ────────────────────────────────────────────────── */
+
+    openExport: () => {
+      const p = get().pipeline;
+      if (!p) return;
+      const datasets = get().datasets.filter(
+        (d) => p.datasetIds.includes(d.id) || (d.connectedNodeId && p.nodes.some((n) => n.id === d.connectedNodeId)),
+      );
+      set({
+        exportOpen: true,
+        exportHealth: buildExportHealthCheck({ pipeline: p, datasets, hasRun: Boolean(get().activeRunTrace) }),
+      });
+    },
+
+    closeExport: () => set({ exportOpen: false }),
+
+    runExport: async (modes) => {
+      const s = get();
+      const p = s.pipeline;
+      if (!p || s.exporting || modes.length === 0) return;
+      set({ exporting: true });
+      try {
+        const datasets = s.datasets.filter(
+          (d) => p.datasetIds.includes(d.id) || (d.connectedNodeId && p.nodes.some((n) => n.id === d.connectedNodeId)),
+        );
+        const ctx: ExportContext = {
+          pipeline: p,
+          run: {
+            tables: s.tables,
+            finalOutput: s.finalOutput,
+            packets: s.handoffPackets,
+            packetWarnings: s.packetWarnings,
+            teamRuns: s.teamRunTraces,
+            agentRuns: s.agentRunTraces,
+            toolTraces: s.activeRunTrace?.toolTraces,
+            runTrace: s.activeRunTrace,
+            datasets,
+            takes: s.takes,
+            evalResults: s.activeRunTrace?.evalResults,
+          },
+          productDrop: s.productDrop ?? undefined,
+          realityMeter: s.realityMeter ?? undefined,
+          productBrief: s.productBrief ?? undefined,
+        };
+        const manifest = await downloadExportBundle(ctx, modes);
+        if (hasSupabase()) void saveExport(manifest);
+        set({
+          lastExportManifest: manifest,
+          notice: `Exported ${manifest.fileCount} files · ${modes.length} mode${modes.length > 1 ? "s" : ""}.`,
+        });
+      } catch (err) {
+        set({ notice: (err as Error)?.message ?? "Export failed." });
+      } finally {
+        set({ exporting: false });
+      }
     },
 
     generate: async (description) => {
