@@ -90,6 +90,13 @@ additive + optional so existing pipelines stay valid.
   runs a saved pipeline. **Never export secret values.**
 - **Template packs (Prompt 08).** `lib/pipeline/packs.ts` groups templates into 7 packs;
   the Templates page renders pack-grouped rich cards. Demo data must stay realistic — no lorem.
+- **Accounts / connectors (Prompt 09).** Auth is config-gated — OFF by default so the public
+  demo builder is preserved (`authEnabled()` needs `NEXT_PUBLIC_AUTH_ENABLED=true`). **Google
+  sign-in ≠ Google Drive access** — keep them separate. Prefer narrow scopes (`drive.file`).
+  OAuth tokens are AES-256-GCM encrypted server-side (`lib/auth/tokens.ts`) and **never** sent
+  to the client, stored in pipeline JSON, or exported. SSR auth via `lib/supabase/browser.ts`
+  + `serverClient.ts`; the legacy anon `client.ts` stays for the demo data path. RLS migration
+  `0007` is transitional — apply only after enabling auth; don't hand-hack the DB.
 - **Persistence.** `supabase/migrations/` runs `0001`–`0006`. Later migrations are additive +
   optional (saveDataset/saveTake/saveExport degrade gracefully without them). Use migrations,
   never hand-hack the DB.

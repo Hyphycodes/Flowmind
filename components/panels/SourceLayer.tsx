@@ -15,6 +15,7 @@ import { usePipelineStore } from "@/store/pipelineStore";
 import { getTool } from "@/lib/tools/registry";
 import { checkDataContract, type ContractStatus } from "@/lib/contracts/check";
 import { SOURCE_MODE_LABEL, SOURCE_MODE_OPTIONS } from "@/lib/datasets/sourceModes";
+import { DriveSourceBlock } from "./DriveSourceBlock";
 import { cn } from "@/lib/ui/cn";
 
 const STATUS_STYLE: Record<ContractStatus, { label: string; cls: string; dot: string }> = {
@@ -168,6 +169,8 @@ export function SourceLayer({ node }: { node: PipelineNode }) {
           {mode === "previous_take" && (
             <PreviousTake node={node} tables={tables} bind={bindTakeTableToSource} />
           )}
+
+          {mode === "google_drive" && <DriveSourceBlock node={node} />}
 
           {(mode === "uploaded_file" ||
             mode === "manual_table" ||

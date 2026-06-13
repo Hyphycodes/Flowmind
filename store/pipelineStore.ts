@@ -6,6 +6,7 @@ import {
   type FieldMapping,
   type FinalOutput,
   type GenerationStyle,
+  type GoogleDriveSourceConfig,
   type HandoffPacket,
   type InputSourceMode,
   type NodeStatus,
@@ -158,6 +159,7 @@ interface PipelineState {
   setNodeScenario: (nodeId: string, scenarioTag: string | null) => void;
   applyFieldMapping: (mapping: FieldMapping) => void;
   bindTakeTableToSource: (nodeId: string, tableId: string, snapshot: boolean) => void;
+  setNodeDriveSource: (nodeId: string, drive: GoogleDriveSourceConfig) => void;
 
   /** Execution / Takes */
   setExecutionMode: (mode: ExecutionMode) => void;
@@ -453,6 +455,14 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         notice: `"${dataset.name}" is now the source for ${node?.title ?? "this node"}.`,
       }));
     },
+
+    setNodeDriveSource: (nodeId, drive) =>
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) =>
+          n.id === nodeId ? { ...n, source: { ...(n.source ?? {}), mode: "google_drive", drive } } : n,
+        ),
+      })),
 
     setNodeScenario: (nodeId, scenarioTag) => {
       const tag = scenarioTag ?? undefined;

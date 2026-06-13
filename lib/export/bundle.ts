@@ -156,6 +156,17 @@ export async function createExportBundle(
     json("tools/tool-attachments.json", p.nodes.map((n) => ({ nodeId: n.id, attachments: n.toolAttachments, teamAttachments: n.team?.toolAttachments ?? [] })));
     json("tools/tool-traces.json", run?.toolTraces ?? run?.runTrace?.toolTraces ?? []);
 
+    // Google Drive (no tokens — those stay encrypted, server-side, in connected_accounts).
+    if (p.nodes.some((n) => n.source?.mode === "google_drive")) {
+      json("tools/google-drive.json", TOOLS.filter((t) => t.id.startsWith("google_")));
+      json(
+        "source-configs/google-drive-sources.json",
+        p.nodes
+          .filter((n) => n.source?.mode === "google_drive")
+          .map((n) => ({ nodeId: n.id, title: n.title, drive: n.source?.drive ?? null })),
+      );
+    }
+
     json("models/model-providers.json", Array.from(new Set(MODELS.map((m) => m.provider))));
     json("models/model-definitions.json", MODELS);
     json("models/model-selections.json", p.nodes.map((n) => ({ nodeId: n.id, nodeTitle: n.title, selection: n.modelSelection ?? null, agentSelections: n.team?.agents.map((a) => ({ agentId: a.id, selection: a.modelSelection ?? null })) ?? [] })));

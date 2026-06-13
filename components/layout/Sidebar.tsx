@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Layers, Library, Play, Plus, Settings } from "lucide-react";
+import { BookOpen, Layers, Library, LogIn, Play, Plus, Settings } from "lucide-react";
 import { cn } from "@/lib/ui/cn";
 
 const NAV = [
@@ -91,16 +92,62 @@ function Meter({ label, value, pct, accent }: { label: string; value: string; pc
   );
 }
 
+type Session = {
+  authEnabled: boolean;
+  user: { email?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
+};
+
 function ProfileCard() {
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then(setSession)
+      .catch(() => setSession({ authEnabled: false, user: null }));
+  }, []);
+
+  const user = session?.user;
+  const enabled = session?.authEnabled;
+
+  // Signed in
+  if (user) {
+    const name = user.displayName ?? user.email ?? "You";
+    return (
+      <Link href="/account" className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5 transition hover:bg-white/[0.04]">
+        {user.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
+        ) : (
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet to-pink text-xs font-semibold text-white">
+            {name.slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-medium text-ink">{name}</div>
+          <div className="truncate text-[11px] text-ink-faint">{user.email ?? "Account"}</div>
+        </div>
+      </Link>
+    );
+  }
+
+  // Auth enabled but not signed in
+  if (enabled) {
+    return (
+      <Link href="/login" className="flex items-center gap-2 rounded-xl border border-line-strong bg-white/[0.04] p-2.5 text-[13px] font-medium text-ink transition hover:bg-white/[0.09]">
+        <LogIn size={15} /> Sign in
+      </Link>
+    );
+  }
+
+  // Demo mode
   return (
-    <div className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet to-pink text-xs font-semibold text-white">
-        F
-      </div>
+    <Link href="/account" className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5 transition hover:bg-white/[0.04]">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet to-pink text-xs font-semibold text-white">F</div>
       <div className="min-w-0">
-        <div className="truncate text-[13px] font-medium text-ink">You</div>
+        <div className="truncate text-[13px] font-medium text-ink">Demo</div>
         <div className="truncate text-[11px] text-ink-faint">Flowmind workspace</div>
       </div>
-    </div>
+    </Link>
   );
 }

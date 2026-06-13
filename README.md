@@ -79,12 +79,26 @@ Room traces, and Packet View still demonstrate the full UI.
 
 ## Supabase
 
-Schema lives in `supabase/migrations/` — `0001` (`pipelines` + `runs`), `0002` (`datasets`,
-`takes`, `pipeline_versions`, `tools`, `model_configs`), `0003` (Input Studio dataset
-metadata), `0004` (model/tool registry), `0005` (Take eval scores), `0006` (`exports`
-history). The app runs fully without the later migrations — they only add persistence for
-optional metadata. **RLS is permissive** for the single-user V1 prototype — tighten the
-policies before exposing it publicly (the first follow-up when auth is added).
+Schema lives in `supabase/migrations/` — `0001`–`0006` (pipelines, runs, datasets, takes,
+registries, exports) plus `0007` (auth: profiles, workspaces, connected accounts, Google Drive
+files, ownership + RLS). The app runs fully without the later migrations — they only add
+persistence/ownership. **RLS is permissive** until `0007` is applied; apply it after enabling
+auth (see below). Details: [`docs/RLS_SECURITY.md`](docs/RLS_SECURITY.md).
+
+## Accounts, auth & Google Drive
+
+Accounts are **opt-in and off by default** — Flowmind runs as a public demo (no login) so the
+builder and templates work for everyone. To turn on accounts:
+
+1. Enable the **Google provider** in Supabase Auth and create a Google Cloud OAuth client.
+2. Set `NEXT_PUBLIC_AUTH_ENABLED=true`, `NEXT_PUBLIC_APP_URL`, and `SUPABASE_SERVICE_ROLE_KEY`.
+3. Apply migration `0007`.
+
+**Sign in with Google** (account) and **Connect Google Drive** (per-file `drive.file` access)
+are deliberately separate. OAuth tokens are AES-256-GCM encrypted server-side
+(`FLOWMIND_TOKEN_ENCRYPTION_SECRET`), never sent to the client and never exported. Drive
+appears as a Source Mode + tool registry entries. See
+[`docs/AUTH.md`](docs/AUTH.md) and [`docs/GOOGLE_DRIVE_CONNECTOR.md`](docs/GOOGLE_DRIVE_CONNECTOR.md).
 
 ## Deploy (Vercel)
 
@@ -140,6 +154,7 @@ page groups cards by pack with node/team/agent/table counts and a readiness scor
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — subsystem map and where things live.
 - [`docs/EXPORT_FORMAT.md`](docs/EXPORT_FORMAT.md) — export modes + ZIP layout.
 - [`docs/TEMPLATE_PACKS.md`](docs/TEMPLATE_PACKS.md) — the packs and their templates.
+- [`docs/AUTH.md`](docs/AUTH.md) · [`docs/GOOGLE_DRIVE_CONNECTOR.md`](docs/GOOGLE_DRIVE_CONNECTOR.md) · [`docs/ONBOARDING.md`](docs/ONBOARDING.md) · [`docs/RLS_SECURITY.md`](docs/RLS_SECURITY.md) — accounts, Drive, onboarding, security.
 
 ## Scripts
 

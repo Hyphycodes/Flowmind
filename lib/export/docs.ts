@@ -6,6 +6,7 @@ import type {
   RealityMeter,
 } from "@/lib/pipeline/schema";
 import { getTool } from "@/lib/tools/registry";
+import { envVarsForTool } from "@/lib/tools/schema";
 import { recommendModelForNode } from "@/lib/models/recommend";
 
 export type DocsContext = {
@@ -24,7 +25,16 @@ export function deriveEnvExample(pipeline: Pipeline): string {
   const toolIds = new Set(
     pipeline.nodes.flatMap((n) => [n.source?.toolId, ...n.toolAttachments.map((a) => a.toolId)]).filter(Boolean) as string[],
   );
-  for (const id of toolIds) for (const env of getTool(id)?.requiredEnv ?? []) keys.add(env);
+  for (const id of toolIds) {
+    const tool = getTool(id);
+    if (tool) for (const env of envVarsForTool(tool)) keys.add(env);
+  }
+  // Google Drive source/connector keys (tokens are NEVER exported).
+  if (pipeline.nodes.some((n) => n.source?.mode === "google_drive")) {
+    keys.add("GOOGLE_CLIENT_ID");
+    keys.add("GOOGLE_CLIENT_SECRET");
+    keys.add("FLOWMIND_TOKEN_ENCRYPTION_SECRET");
+  }
   // Persistence is optional but commonly used.
   keys.add("NEXT_PUBLIC_SUPABASE_URL");
   keys.add("NEXT_PUBLIC_SUPABASE_ANON_KEY");

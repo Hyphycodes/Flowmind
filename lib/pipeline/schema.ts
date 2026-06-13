@@ -68,6 +68,7 @@ export const SOURCE_MODES = [
   "memory",
   "webhook",
   "database",
+  "google_drive",
 ] as const;
 export type InputSourceMode = (typeof SOURCE_MODES)[number];
 
@@ -208,10 +209,29 @@ export type QualityTarget = (typeof QUALITY_TARGETS)[number];
 export const GENERATION_STYLES = ["api_like", "user_like", "business_like", "edge_case_pack"] as const;
 export type GenerationStyle = (typeof GENERATION_STYLES)[number];
 
+/** Google Drive source binding (mode = "google_drive"). No tokens — those live encrypted,
+ *  server-side, in connected_accounts. */
+export const googleDriveSourceConfigSchema = z.object({
+  connectedAccountId: z.string().optional(),
+  pickMode: z.enum(["picked_files", "folder", "search", "manual_file_id"]).default("picked_files"),
+  fileIds: z.array(z.string()).default([]),
+  folderId: z.string().optional(),
+  query: z.string().optional(),
+  mimeTypes: z.array(z.string()).default([]),
+  contentMode: z.enum(["metadata", "text", "sheet_rows", "file_link"]).default("metadata"),
+  range: z.string().optional(),
+  files: z
+    .array(z.object({ id: z.string(), name: z.string(), mimeType: z.string().optional(), webViewLink: z.string().optional() }))
+    .default([]),
+});
+export type GoogleDriveSourceConfig = z.infer<typeof googleDriveSourceConfigSchema>;
+
 export const sourceConfigSchema = z.object({
   mode: z.enum(SOURCE_MODES).default("input_studio"),
   datasetId: z.string().optional(),
   datasetName: z.string().optional(),
+  /** Google Drive binding (mode = "google_drive") */
+  drive: googleDriveSourceConfigSchema.optional(),
   /** dataset/source to fall back to when a live tool has no key */
   fallbackDatasetId: z.string().optional(),
   toolId: z.string().optional(),

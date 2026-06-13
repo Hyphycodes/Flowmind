@@ -10,11 +10,13 @@ export const SOURCE_MODE_LABEL: Record<InputSourceMode, string> = {
   memory: "Memory",
   webhook: "Webhook",
   database: "Database",
+  google_drive: "Google Drive",
 };
 
 export const SOURCE_MODE_OPTIONS: { mode: InputSourceMode; label: string; hint: string }[] = [
   { mode: "input_studio", label: "Input Studio", hint: "Generated, reusable Seed Dataset" },
   { mode: "live_api", label: "Live API", hint: "Real tool / API call at run time" },
+  { mode: "google_drive", label: "Google Drive", hint: "Selected Drive files / Docs / Sheets" },
   { mode: "previous_take", label: "Previous Take", hint: "An earlier run's output table" },
   { mode: "uploaded_file", label: "Uploaded File", hint: "A file you bring in" },
   { mode: "manual_table", label: "Manual Table", hint: "Hand-entered rows" },
