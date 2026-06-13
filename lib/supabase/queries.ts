@@ -109,6 +109,9 @@ function graphOf(p: Pipeline) {
     version: p.version,
     blueprint: p.blueprint,
     realityMeter: p.realityMeter,
+    productBrief: p.productBrief,
+    productVariations: p.productVariations,
+    remixProposals: p.remixProposals,
   } satisfies JsonRecord;
 }
 

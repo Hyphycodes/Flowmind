@@ -389,7 +389,7 @@ export const jarvisPipeline = P({
   ],
   outputTables: JARVIS_TABLES,
   uiBindings: [
-    { id: "jb-picks", tableId: "ranked_places", componentType: "cardGrid", title: "Top Picks", position: 0, fields: ["name", "score", "why"] },
+    { id: "jb-picks", tableId: "ranked_places", componentType: "recommendationCards", title: "Top Picks", position: 0, fields: ["name", "score", "why"] },
     { id: "jb-plan", tableId: "itinerary", componentType: "summaryCard", title: "Tonight's Plan", position: 1, fields: ["headline", "summary"] },
     { id: "jb-logistics", tableId: "plan", componentType: "timeline", title: "Logistics", position: 2, fields: ["step", "detail", "time"] },
     { id: "jb-taste", tableId: "taste_profile", componentType: "summaryCard", title: "Your Taste", position: 3, fields: ["direction", "prioritize"] },

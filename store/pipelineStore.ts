@@ -13,7 +13,12 @@ import {
   type PacketWarning,
   type Pipeline,
   type PipelineNode,
+  type ProductBrief,
+  type ProductDrop,
+  type ProductVariation,
   type QualityTarget,
+  type RealityMeter,
+  type RemixProposal,
   type RunEvent,
   type RunStep,
   type RunTrace,
@@ -30,14 +35,20 @@ import {
   upsertPipeline,
 } from "@/lib/supabase/queries";
 import type { Dataset } from "@/lib/datasets/schema";
+import { newId } from "@/lib/pipeline/validate";
 import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
 import { applyRepair, type RepairAction } from "@/lib/datasets/repair";
 import { runEvals } from "@/lib/evals/runEval";
 import { buildTake } from "@/lib/takes/build";
+import { generateProductDrop } from "@/lib/product/productDrop";
+import { calculateRealityMeter } from "@/lib/product/realityMeter";
+import { generateProductBrief } from "@/lib/product/brief";
+import { buildRemixProposal } from "@/lib/product/remix";
+import { explainProductBlueprint, type ExplainAudience } from "@/lib/product/explain";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
-export type PanelTab = "preview" | "input" | "data" | "output" | "packets" | "takes";
+export type PanelTab = "product" | "preview" | "input" | "data" | "output" | "packets" | "takes";
 type RunOptions = { onlyNodeId?: string; onlyAgentId?: string };
 
 export type GenerateDatasetInput = {
@@ -94,6 +105,16 @@ interface PipelineState {
   activeTakeId: string | null;
   compareTakeIds: string[];
 
+  /** Product layer (Product Drop / Reality Meter / Remix / Brief) */
+  productDrop: ProductDrop | null;
+  realityMeter: RealityMeter | null;
+  productBrief: ProductBrief | null;
+  remixProposal: RemixProposal | null;
+  remixProposedPipeline: Pipeline | null;
+  remixing: boolean;
+  explainAudience: ExplainAudience;
+  explainText: string | null;
+
   saveStatus: SaveStatus;
   generating: boolean;
   notice: string | null;
@@ -134,6 +155,14 @@ interface PipelineState {
   selectTake: (id: string | null) => void;
   toggleCompareTake: (id: string) => void;
   clearCompare: () => void;
+
+  /** Product layer */
+  refreshProduct: () => void;
+  startRemix: (actionId: string) => void;
+  applyRemix: () => void;
+  cancelRemix: () => void;
+  addProductVariation: (variation: ProductVariation) => void;
+  explain: (audience: ExplainAudience) => void;
 
   generate: (description: string) => Promise<void>;
   runPipeline: (options?: RunOptions) => Promise<void>;
@@ -210,6 +239,14 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     takes: [],
     activeTakeId: null,
     compareTakeIds: [],
+    productDrop: null,
+    realityMeter: null,
+    productBrief: null,
+    remixProposal: null,
+    remixProposedPipeline: null,
+    remixing: false,
+    explainAudience: "founder",
+    explainText: null,
     saveStatus: "idle",
     generating: false,
     notice: null,
@@ -247,9 +284,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         takes: [],
         activeTakeId: null,
         compareTakeIds: [],
+        remixProposal: null,
+        remixProposedPipeline: null,
+        remixing: false,
+        explainText: null,
+        panelTab: "product",
         saveStatus: hasSupabase() ? "saved" : "local",
         notice: null,
       });
+      get().refreshProduct();
     },
 
     selectNode: (id) => set({ selectedNodeId: id }),
@@ -492,6 +535,89 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
 
     clearCompare: () => set({ compareTakeIds: [] }),
 
+    /* ── Product layer ────────────────────────────────────────────────── */
+
+    refreshProduct: () => {
+      const p = get().pipeline;
+      if (!p) {
+        set({ productDrop: null, realityMeter: null, productBrief: null });
+        return;
+      }
+      const ctx = {
+        latestTakeSuccess:
+          get().takes[0]?.status === "success" || get().activeRunTrace?.status === "success",
+      };
+      const drop = generateProductDrop(p);
+      const reality = calculateRealityMeter(p, ctx);
+      const brief = generateProductBrief(p, drop, reality);
+      set({ productDrop: drop, realityMeter: reality, productBrief: brief, explainText: null });
+    },
+
+    startRemix: (actionId) => {
+      const p = get().pipeline;
+      if (!p) return;
+      const result = buildRemixProposal(p, actionId);
+      if (!result) {
+        set({ notice: "That remix isn't available for this pipeline." });
+        return;
+      }
+      if (result.proposal.changes.length === 0) {
+        set({ notice: result.proposal.warnings[0] ?? result.proposal.summary });
+        return;
+      }
+      set({ remixProposal: result.proposal, remixProposedPipeline: result.pipeline, remixing: true });
+    },
+
+    applyRemix: () => {
+      const { remixProposal: proposal, remixProposedPipeline: proposed, pipeline: cur } = get();
+      if (!proposal || !proposed || !cur) return;
+      const variation: ProductVariation | null = proposal.variationName
+        ? {
+            id: newId("var"),
+            pipelineId: cur.id,
+            name: proposal.variationName,
+            description: proposal.summary,
+            positioning: undefined,
+            targetUser: undefined,
+            changes: proposal.changes.map((c) => c.description),
+            linkedRemixProposalIds: [proposal.id],
+            linkedTakeIds: [],
+            createdAt: new Date().toISOString(),
+          }
+        : null;
+      const next: Pipeline = {
+        ...proposed,
+        remixProposals: [proposal, ...(proposed.remixProposals ?? [])].slice(0, 30),
+        productVariations: variation
+          ? [variation, ...(proposed.productVariations ?? [])].slice(0, 20)
+          : proposed.productVariations,
+        updatedAt: new Date().toISOString(),
+      };
+      set({
+        pipeline: applyStatuses(next, () => "idle"),
+        remixProposal: null,
+        remixProposedPipeline: null,
+        remixing: false,
+        selectedNodeId: null,
+        notice: `Applied: ${proposal.title}${variation ? ` → variation "${variation.name}"` : ""}.`,
+      });
+      get().refreshProduct();
+      scheduleSave();
+    },
+
+    cancelRemix: () => set({ remixProposal: null, remixProposedPipeline: null, remixing: false }),
+
+    addProductVariation: (variation) =>
+      mutate((p) => ({ ...p, productVariations: [variation, ...p.productVariations].slice(0, 20) })),
+
+    explain: (audience) => {
+      const p = get().pipeline;
+      const drop = get().productDrop;
+      const reality = get().realityMeter;
+      if (!p || !drop || !reality) return;
+      set({ explainAudience: audience, explainText: explainProductBlueprint(p, drop, reality, audience) });
+    },
+
     generate: async (description) => {
       if (!description.trim() || get().generating) return;
       set({ generating: true, notice: null });
@@ -642,6 +768,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
             void saveRun(trace);
             if (newTake) void saveTake(newTake);
           }
+          get().refreshProduct();
         }
       };
 

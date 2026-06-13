@@ -17,6 +17,41 @@ import { MODELS } from "@/lib/models/providers";
 import { recommendModelForAgent, recommendModelForNode } from "@/lib/models/recommend";
 import { getTool, TOOLS } from "@/lib/tools/registry";
 import { compareTakes, summarizeRunCost } from "@/lib/takes/build";
+import { generateProductDrop } from "@/lib/product/productDrop";
+import { calculateRealityMeter } from "@/lib/product/realityMeter";
+import { generateProductBrief } from "@/lib/product/brief";
+
+function productBriefMd(brief: ReturnType<typeof generateProductBrief>): string {
+  const list = (items: string[]) => (items.length ? items.map((i) => `- ${i}`).join("\n") : "_None_");
+  return [
+    `# ${brief.title} — Product Brief`,
+    ``,
+    brief.summary,
+    ``,
+    brief.targetUser ? `**Target user:** ${brief.targetUser}` : "",
+    ``,
+    `## How it works`,
+    list(brief.howItWorks),
+    ``,
+    `## Data needed`,
+    list(brief.dataNeeded),
+    ``,
+    `## AI teams`,
+    list(brief.aiTeams),
+    ``,
+    `## UI surfaces`,
+    list(brief.uiSurfaces),
+    ``,
+    `## Missing pieces`,
+    list(brief.missingPieces),
+    ``,
+    `## Next steps`,
+    list(brief.nextSteps),
+    ``,
+  ]
+    .filter((l) => l !== "")
+    .join("\n");
+}
 
 export type ExportRun = {
   steps?: unknown;
@@ -245,6 +280,9 @@ function readmeMd(p: Pipeline): string {
     `- \`packets/handoff-packets.json\` and \`packets/field-drift-warnings.json\` — packet timeline plus drift warnings.`,
     `- \`takes/*.json\` + \`takes/comparison.json\` — saved run variations and their comparison.`,
     `- \`evals/eval-scores.json\` and \`costs/cost-trace.json\` — eval dimension scores and cost/latency trace.`,
+    `- \`product/product-drop.json\`, \`product/reality-meter.json\`, \`product/product-brief.md\` — the product concept, buildability, and brief.`,
+    `- \`product/product-variations.json\` and \`product/remix-proposals.json\` — remix history + product variations.`,
+    `- \`preview/ui-preview.json\` — each UI surface with the table + sample rows that power it.`,
     ``,
   ].join("\n");
 }
@@ -256,12 +294,21 @@ function specMd(p: Pipeline): string {
   const bindings = p.uiBindings
     .map((b) => `- \`${b.tableId}\` → **${b.componentType}** (${b.title || "untitled"})`)
     .join("\n");
+  const drop = generateProductDrop(p);
+  const reality = calculateRealityMeter(p);
   return [
     `# ${p.name} — Spec`,
     ``,
     `## Overview`,
     ``,
     p.description || "_No description._",
+    ``,
+    `## Product`,
+    ``,
+    `**${drop.name}** — ${drop.pitch}`,
+    drop.targetUser ? `Target user: ${drop.targetUser}.` : "",
+    `Source: ${drop.keySources?.join(", ") || "—"}. Brain: ${drop.keyTeams?.join(", ") || "—"}. Surface: ${drop.keySurfaces?.join(", ") || "—"}.`,
+    `**Reality Meter: ${reality.buildability}%** (${reality.label ?? "—"}).${reality.missing?.length ? ` Missing: ${reality.missing.join(", ")}.` : ""} Fastest MVP: ${reality.fastestMvpPath}. Next: ${reality.recommendedNextFeature ?? reality.recommendedNext}.`,
     ``,
     `## Data flow`,
     ``,
@@ -597,6 +644,41 @@ export async function exportPipeline(pipeline: Pipeline, run?: ExportRun | null)
           warningCount: t.warningCount,
         })),
       },
+      null,
+      2,
+    ),
+  );
+
+  // ── Product layer (Prompt 06): Product Drop, Reality Meter, Brief, Variations, Remix ──
+  const productDrop = generateProductDrop(pipeline);
+  const realityMeter = calculateRealityMeter(pipeline, { latestTakeSuccess: run?.runTrace?.status === "success" });
+  const productBrief = generateProductBrief(pipeline, productDrop, realityMeter);
+  zip.file("product/product-drop.json", JSON.stringify(productDrop, null, 2));
+  zip.file("product/reality-meter.json", JSON.stringify(realityMeter, null, 2));
+  zip.file("product/product-brief.md", productBriefMd(productBrief));
+  zip.file("product/product-variations.json", JSON.stringify(pipeline.productVariations ?? [], null, 2));
+  zip.file("product/remix-proposals.json", JSON.stringify(pipeline.remixProposals ?? [], null, 2));
+
+  // ── Preview (Data → UI) ──
+  const previewTables = run?.tables ?? pipeline.outputTables;
+  zip.file("preview/ui-bindings.json", JSON.stringify(pipeline.uiBindings, null, 2));
+  zip.file(
+    "preview/ui-preview.json",
+    JSON.stringify(
+      pipeline.uiBindings
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((b) => {
+          const table = previewTables.find((t) => t.id === b.tableId);
+          return {
+            componentType: b.componentType,
+            title: b.title,
+            poweredBy: b.tableId,
+            fields: b.fields,
+            columns: table?.columns ?? [],
+            sampleRows: table?.rows.slice(0, 5) ?? [],
+          };
+        }),
       null,
       2,
     ),

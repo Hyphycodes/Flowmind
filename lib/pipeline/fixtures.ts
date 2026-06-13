@@ -235,7 +235,7 @@ export const realEstatePipeline = P({
   ],
   outputTables: RE_TABLES,
   uiBindings: [
-    { id: "b-score", tableId: "deal_score", componentType: "summaryCard", title: "Deal Score", position: 0, fields: ["grade", "score", "recommendation"] },
+    { id: "b-score", tableId: "deal_score", componentType: "scoreCard", title: "Deal Score", position: 0, fields: ["grade", "score", "recommendation"] },
     { id: "b-metrics", tableId: "deal_summary", componentType: "metricCards", title: "Key Numbers", position: 1, fields: ["arv", "repairs", "max_offer", "cash_flow"] },
     { id: "b-comps", tableId: "comps", componentType: "recordList", title: "Comparable Sales", position: 2, fields: ["address", "sold_price", "sqft", "sold_date"] },
     { id: "b-pitch", tableId: "buyer_pitch", componentType: "summaryCard", title: "Buyer Pitch", position: 3, fields: ["headline", "summary"] },

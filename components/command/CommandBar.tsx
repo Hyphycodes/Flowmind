@@ -11,6 +11,20 @@ const CHIPS = [
   "Market research engine",
 ];
 
+/** Maps a natural-language command to a remix action id (deterministic foundation). */
+const REMIX_INTENTS: [RegExp, string][] = [
+  [/premium|fire|luxur/, "make_premium"],
+  [/cheaper|cheap|budget|cheaper models/, "make_cheaper"],
+  [/smarter|stronger|more accurate|accurate/, "make_smarter"],
+  [/faster|speed/, "make_faster"],
+  [/eval|judge|score the output/, "add_evaluator"],
+  [/approval|human.*(gate|review|approve)/, "add_approval"],
+  [/input studio|stronger inputs|add.*dataset|reusable data/, "add_input_studio"],
+  [/client.?ready|client/, "make_client_ready"],
+  [/saas|subscription|productize/, "turn_into_saas"],
+  [/add.*ui|ui preview|add a ui/, "add_ui"],
+];
+
 export function CommandBar() {
   const generate = usePipelineStore((s) => s.generate);
   const generating = usePipelineStore((s) => s.generating);
@@ -21,6 +35,8 @@ export function CommandBar() {
   const openInputStudio = usePipelineStore((s) => s.openInputStudio);
   const setPanelTab = usePipelineStore((s) => s.setPanelTab);
   const setSourceMode = usePipelineStore((s) => s.setSourceMode);
+  const startRemix = usePipelineStore((s) => s.startRemix);
+  const explain = usePipelineStore((s) => s.explain);
   const [text, setText] = useState("");
 
   const selectedNode = selectedNodeId ? pipeline?.nodes.find((n) => n.id === selectedNodeId) : undefined;
@@ -51,6 +67,37 @@ export function CommandBar() {
   const submit = (value?: string) => {
     const v = (value ?? text).trim();
     if (!v || generating) return;
+
+    // Deterministic intent routing: remix / product commands act on the current
+    // pipeline; everything else generates a new one.
+    const lower = v.toLowerCase();
+    const isCommand = /^(make|add|turn|use|reduce|compress|split|show|explain|compare)\b/.test(lower) || /\bthis\b/.test(lower);
+    if (pipeline && isCommand) {
+      if (/explain/.test(lower)) {
+        setText("");
+        setPanelTab("product");
+        explain("founder");
+        return;
+      }
+      if (/missing|reality|how buildable/.test(lower)) {
+        setText("");
+        setPanelTab("product");
+        setNotice("Reality Meter is in the Product tab.");
+        return;
+      }
+      if (/compare.*take|compare the last/.test(lower)) {
+        setText("");
+        setPanelTab("takes");
+        return;
+      }
+      const remix = REMIX_INTENTS.find(([re]) => re.test(lower));
+      if (remix) {
+        setText("");
+        startRemix(remix[1]);
+        return;
+      }
+    }
+
     setText("");
     void generate(v);
   };

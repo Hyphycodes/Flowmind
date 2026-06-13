@@ -83,6 +83,9 @@ export const COMPONENT_TYPES = [
   "checklist",
   "calendar",
   "comparisonTable",
+  "actionChips",
+  "scoreCard",
+  "recommendationCards",
 ] as const;
 export type ComponentType = (typeof COMPONENT_TYPES)[number];
 
@@ -440,10 +443,28 @@ export const productDropSchema = z.object({
   missingApis: z.array(z.string()).default([]),
   fastestMvpPath: z.string().default(""),
   monetization: z.string().default(""),
+  /** Prompt 06 additions (all optional / additive) */
+  category: z.string().optional(),
+  mainUseCase: z.string().optional(),
+  keySources: z.array(z.string()).default([]),
+  keyTeams: z.array(z.string()).default([]),
+  keySurfaces: z.array(z.string()).default([]),
+  monetizationAngle: z.string().optional(),
+  suggestedPack: z.string().optional(),
+  nextBestFeature: z.string().optional(),
 });
 export type ProductDrop = z.infer<typeof productDropSchema>;
 
 const RISK = z.enum(["low", "medium", "high"]);
+const RISK_U = z.enum(["low", "medium", "high", "unknown"]);
+
+export const REALITY_LABELS = [
+  "rough_idea",
+  "prototype_ready",
+  "buildable",
+  "production_shaped",
+  "needs_data",
+] as const;
 
 export const realityMeterSchema = z.object({
   buildability: z.number().default(0),
@@ -456,8 +477,116 @@ export const realityMeterSchema = z.object({
   recommendedNext: z.string().default(""),
   fakeFirst: z.array(z.string()).default([]),
   automateLater: z.array(z.string()).default([]),
+  /** Prompt 06 additions (all optional / additive) */
+  label: z.enum(REALITY_LABELS).optional(),
+  missingData: z.array(z.string()).default([]),
+  modelRisk: RISK_U.optional(),
+  toolReadiness: z
+    .object({ ready: z.number().default(0), missing: z.number().default(0), warnings: z.array(z.string()).default([]) })
+    .optional(),
+  exportReadiness: z.object({ ready: z.boolean().default(true), missingItems: z.array(z.string()).default([]) }).optional(),
+  recommendedNextFeature: z.string().optional(),
+  notes: z.string().optional(),
 });
 export type RealityMeter = z.infer<typeof realityMeterSchema>;
+
+/* ── Remix system + product variations + brief ───────────────────────── */
+
+export const REMIX_CATEGORIES = [
+  "quality",
+  "cost",
+  "speed",
+  "ui",
+  "data",
+  "tools",
+  "teams",
+  "export",
+  "business",
+  "production",
+] as const;
+export type RemixCategory = (typeof REMIX_CATEGORIES)[number];
+
+export const remixActionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string().optional(),
+  category: z.enum(REMIX_CATEGORIES),
+  instruction: z.string().default(""),
+  appliesTo: z.enum(["pipeline", "node", "team", "agent", "take", "output_table", "ui_preview"]).default("pipeline"),
+});
+export type RemixAction = z.infer<typeof remixActionSchema>;
+
+export const remixChangeSchema = z.object({
+  type: z.enum([
+    "add_node",
+    "remove_node",
+    "update_node",
+    "add_edge",
+    "update_prompt",
+    "update_model",
+    "add_tool",
+    "add_dataset",
+    "add_ui_binding",
+    "update_product_drop",
+    "update_reality_meter",
+  ]),
+  description: z.string(),
+  targetId: z.string().optional(),
+  before: z.any().optional(),
+  after: z.any().optional(),
+});
+export type RemixChange = z.infer<typeof remixChangeSchema>;
+
+export const remixProposalSchema = z.object({
+  id: z.string(),
+  pipelineId: z.string(),
+  actionId: z.string(),
+  title: z.string(),
+  summary: z.string().default(""),
+  changes: z.array(remixChangeSchema).default([]),
+  estimatedImpact: z
+    .object({
+      quality: z.string().optional(),
+      cost: z.string().optional(),
+      speed: z.string().optional(),
+      complexity: z.string().optional(),
+    })
+    .optional(),
+  variationName: z.string().optional(),
+  warnings: z.array(z.string()).default([]),
+  createdAt: z.string().default(() => new Date().toISOString()),
+});
+export type RemixProposal = z.infer<typeof remixProposalSchema>;
+
+export const productVariationSchema = z.object({
+  id: z.string(),
+  pipelineId: z.string(),
+  name: z.string(),
+  description: z.string().default(""),
+  positioning: z.string().optional(),
+  targetUser: z.string().optional(),
+  changes: z.array(z.string()).default([]),
+  linkedTakeIds: z.array(z.string()).default([]),
+  linkedRemixProposalIds: z.array(z.string()).default([]),
+  createdAt: z.string().default(() => new Date().toISOString()),
+});
+export type ProductVariation = z.infer<typeof productVariationSchema>;
+
+export const productBriefSchema = z.object({
+  id: z.string(),
+  pipelineId: z.string(),
+  title: z.string(),
+  summary: z.string().default(""),
+  targetUser: z.string().optional(),
+  howItWorks: z.array(z.string()).default([]),
+  dataNeeded: z.array(z.string()).default([]),
+  aiTeams: z.array(z.string()).default([]),
+  uiSurfaces: z.array(z.string()).default([]),
+  missingPieces: z.array(z.string()).default([]),
+  nextSteps: z.array(z.string()).default([]),
+  createdAt: z.string().default(() => new Date().toISOString()),
+});
+export type ProductBrief = z.infer<typeof productBriefSchema>;
 
 /* ── Pipeline (Product Blueprint) ────────────────────────────────────── */
 
@@ -483,6 +612,10 @@ export const pipelineSchema = z.object({
   scenarioSets: z.array(scenarioSetSchema).default([]),
   blueprint: productDropSchema.optional(),
   realityMeter: realityMeterSchema.optional(),
+  /** Prompt 06: product brief, variations, and applied remix history (graph-jsonb backed) */
+  productBrief: productBriefSchema.optional(),
+  productVariations: z.array(productVariationSchema).default([]),
+  remixProposals: z.array(remixProposalSchema).default([]),
   createdAt: z.string().default(() => new Date().toISOString()),
   updatedAt: z.string().default(() => new Date().toISOString()),
 });

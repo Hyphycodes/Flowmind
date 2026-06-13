@@ -11,8 +11,10 @@ import { TableList } from "./TableList";
 import { UIPreview } from "./UIPreview";
 import { DatasetPanel } from "./DatasetPanel";
 import { TakesPanel } from "./TakesPanel";
+import { ProductPanel } from "./ProductPanel";
 
 const TABS = [
+  { id: "product", label: "Product" },
   { id: "preview", label: "Preview" },
   { id: "input", label: "Input" },
   { id: "data", label: "Data" },
@@ -50,6 +52,7 @@ export function OutputPanel() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {panelTab === "product" && <ProductPanel />}
         {panelTab === "output" && <OutputTab />}
         {panelTab === "input" && <InputTab />}
         {panelTab === "data" && <DatasetPanel />}
