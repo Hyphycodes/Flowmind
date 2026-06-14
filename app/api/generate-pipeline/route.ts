@@ -1,6 +1,7 @@
 import { hasAnthropicKey } from "@/lib/ai/anthropic";
 import { generatePipeline } from "@/lib/pipeline/generatePipeline";
 import { instantiatePipeline, matchTemplate } from "@/lib/pipeline/fixtures";
+import { safeApiError } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -12,8 +13,8 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const description =
-    typeof (body as any)?.description === "string" ? (body as any).description.trim() : "";
+  const raw = (body ?? {}) as { description?: unknown };
+  const description = typeof raw.description === "string" ? raw.description.trim() : "";
   if (!description) {
     return Response.json(
       { error: "Describe the AI system you want to build." },
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     return Response.json({
       pipeline: instantiatePipeline(t.pipeline, t.pipeline.name),
       source: "template",
-      note: `Generation failed (${(err as Error)?.message ?? "error"}); used the closest template.`,
+      note: `Generation failed (${safeApiError(err, "error")}); used the closest template.`,
     });
   }
 }

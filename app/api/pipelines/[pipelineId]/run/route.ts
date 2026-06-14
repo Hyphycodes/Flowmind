@@ -3,6 +3,7 @@ import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { getPipeline } from "@/lib/supabase/queries";
 import { runPipelineRuntime } from "@/lib/runtime";
 import { newId } from "@/lib/pipeline/validate";
+import { safeApiError } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -60,6 +61,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ pipelin
       warnings: result.warnings,
     });
   } catch (err) {
-    return Response.json({ status: "error", error: (err as Error)?.message ?? "Run failed" }, { status: 500 });
+    return Response.json({ status: "error", error: safeApiError(err, "Run failed") }, { status: 500 });
   }
 }

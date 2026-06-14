@@ -49,6 +49,7 @@ import {
   toolAdaptersTs,
 } from "./runtime";
 import { buildExportHealthCheck } from "./healthCheck";
+import { assertNoSecretsInExport } from "@/lib/security/secrets";
 import {
   type ExportFileType,
   type ExportManifest,
@@ -259,12 +260,16 @@ export function collectExportFiles(
   return { files: out, manifest, slug: slugify(drop.name) };
 }
 
-/** Build the export ZIP for the selected modes, returning the blob + manifest. */
+/** Build the export ZIP for the selected modes, returning the blob + manifest.
+ *  Runs the export safety scanner first — the SAME scanner used by the GitHub PR path — so a ZIP
+ *  download can never ship a secret. (Exports are deterministic + token-free by design; this is
+ *  defense-in-depth.) Throws a clean error if anything looks like a credential. */
 export async function createExportBundle(
   ctx: ExportContext,
   modes: ExportMode[],
 ): Promise<{ blob: Blob; manifest: ExportManifest; slug: string }> {
   const { files, manifest, slug } = collectExportFiles(ctx, modes);
+  assertNoSecretsInExport(files);
   const zip = new JSZip();
   for (const f of files) zip.file(f.path, f.content);
   const blob = await zip.generateAsync({ type: "blob" });

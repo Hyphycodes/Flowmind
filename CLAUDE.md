@@ -152,6 +152,8 @@ client components carry `"use client"`.
 - `npm run dev` — dev server (http://localhost:3000)
 - `npm run build` — production build
 - `npm run lint` — eslint
+- `npm run typecheck` — `tsc --noEmit`
+- `npm run audit:secrets` — scan tracked files for committed secrets (CI-friendly)
 
 ## Env (`.env.local`)
 
@@ -164,7 +166,27 @@ client components carry `"use client"`.
   `MISTRAL_API_KEY`, `GOOGLE_PLACES_API_KEY`, `SERPAPI_API_KEY`, `RENTCAST_API_KEY`,
   `ATTOM_API_KEY`.
 
-## Security note
+## Security & hardening (Prompt 12) — rules for future agents
 
-RLS is currently permissive (single-user prototype, no auth). Tighten policies in
-`supabase/migrations` when auth is added — this is the first follow-up.
+Production-shaped posture. When editing, keep ALL of these true:
+
+- **Never expose secrets.** Provider/Stripe/service-role keys + OAuth/App tokens are server-only
+  (`runtime = "nodejs"` routes). Never return them, log them, put them in pipeline JSON, or export
+  them. Status routes return booleans + missing env NAMES only. Pass error strings through
+  `safeApiError`/`redactSecrets` (`lib/security/secrets.ts`, `lib/api/guards.ts`).
+- **Exports must pass the safety scanner.** Both ZIP (`createExportBundle`) and GitHub PR export
+  call the shared scanner in `lib/security/secrets.ts`. Don't add an export path that skips it.
+- **RLS: no permissive anon policies on private data.** Account/connector/billing tables (0007–
+  0009) are strictly owner-scoped. The only transitional null-owned allowance is on pipelines/
+  datasets/takes for the public demo — keep it isolated; don't widen it.
+- **Server route guards.** Use `lib/api/guards.ts` (`requireUser`, `validateJsonBody`,
+  `requirePipelineAccess`). Don't duplicate guard logic ad hoc.
+- **Billing/credits are server-enforced.** Never trust client plan/credit state; gates live in
+  `lib/billing/featureGates.ts`. Always verify the Stripe webhook signature.
+- **Login ≠ resource access.** Google sign-in ≠ Drive; GitHub sign-in ≠ repo access. Keep separate.
+- **Public demo stays isolated**, and **unfinished flows are clearly disabled** (no fake buttons).
+- Don't rebuild/redesign the UI; this is a hardening posture, not a feature surface.
+
+Docs: `docs/SECURITY.md`, `RLS_SECURITY.md`, `EXPORT_SECURITY.md`, `OAUTH_CONNECTORS.md`,
+`ENV_SETUP.md`, `PRODUCTION_CHECKLIST.md`, `BETA_READINESS.md`. Readiness self-check:
+`/settings/readiness`.

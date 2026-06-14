@@ -67,12 +67,19 @@ export default function SettingsPage() {
           </div>
         )}
 
-        <Card title="Security">
+        <Card title="Security &amp; readiness">
           <p className="text-[12.5px] leading-relaxed text-ink-dim">
-            Row-level security is currently permissive (single-user prototype, no auth). Tighten the
-            Supabase RLS policies in <code className="font-mono text-[11px]">supabase/migrations</code>{" "}
-            before exposing this publicly.
+            New user-owned tables (accounts, connectors, billing) use per-user RLS (migrations{" "}
+            <code className="font-mono text-[11px]">0007–0009</code>). Legacy/demo rows are null-owned
+            and stay readable in public-demo mode; tighten the transitional policies once auth is
+            enabled — see <code className="font-mono text-[11px]">docs/RLS_SECURITY.md</code>.
           </p>
+          <Link
+            href="/settings/readiness"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-line bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-ink-dim transition hover:text-ink"
+          >
+            Run beta-readiness check →
+          </Link>
         </Card>
 
         <Card title="About">

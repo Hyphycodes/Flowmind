@@ -20,6 +20,7 @@ import { newId } from "@/lib/pipeline/validate";
 import { getBillingAccount, recordRunSpend } from "@/lib/billing/usage";
 import { estimateCreditsForRun } from "@/lib/billing/credits";
 import { canRunPipeline } from "@/lib/billing/featureGates";
+import { safeApiError } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -332,7 +333,7 @@ export async function POST(req: Request) {
         send({
           kind: "run-done",
           status: "error",
-          error: (err as Error)?.message ?? "Run failed",
+          error: safeApiError(err, "Run failed"),
           runTrace,
         });
       } finally {

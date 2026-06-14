@@ -189,6 +189,7 @@ page groups cards by pack with node/team/agent/table counts and a readiness scor
 - [`docs/AUTH.md`](docs/AUTH.md) · [`docs/GOOGLE_DRIVE_CONNECTOR.md`](docs/GOOGLE_DRIVE_CONNECTOR.md) · [`docs/ONBOARDING.md`](docs/ONBOARDING.md) · [`docs/RLS_SECURITY.md`](docs/RLS_SECURITY.md) — accounts, Drive, onboarding, security.
 - [`docs/GITHUB_INTEGRATION.md`](docs/GITHUB_INTEGRATION.md) · [`docs/GITHUB_EXPORT.md`](docs/GITHUB_EXPORT.md) · [`docs/REPO_SOURCE_NODES.md`](docs/REPO_SOURCE_NODES.md) — GitHub App connection, repo/PR export, repo source nodes.
 - [`docs/BILLING.md`](docs/BILLING.md) · [`docs/CREDITS_AND_USAGE.md`](docs/CREDITS_AND_USAGE.md) · [`docs/PLANS.md`](docs/PLANS.md) · [`docs/STRIPE_SETUP.md`](docs/STRIPE_SETUP.md) — billing, credits, plans, Stripe setup.
+- [`docs/SECURITY.md`](docs/SECURITY.md) · [`docs/EXPORT_SECURITY.md`](docs/EXPORT_SECURITY.md) · [`docs/OAUTH_CONNECTORS.md`](docs/OAUTH_CONNECTORS.md) · [`docs/ENV_SETUP.md`](docs/ENV_SETUP.md) · [`docs/PRODUCTION_CHECKLIST.md`](docs/PRODUCTION_CHECKLIST.md) · [`docs/BETA_READINESS.md`](docs/BETA_READINESS.md) — security model, hardening, and pre-launch checklist.
 
 ## Scripts
 
