@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/user";
 import { authEnabled } from "@/lib/auth/config";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { ConnectedAccounts } from "@/components/auth/ConnectedAccounts";
+import { GitHubConnection } from "@/components/github/GitHubConnection";
 
 export default async function AccountPage() {
   const enabled = authEnabled();
@@ -48,7 +49,10 @@ export default async function AccountPage() {
 
             <section>
               <h2 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-ink-faint">Connected accounts</h2>
-              <ConnectedAccounts />
+              <div className="space-y-2.5">
+                <ConnectedAccounts />
+                <GitHubConnection />
+              </div>
             </section>
           </>
         )}

@@ -11,12 +11,20 @@ export const SOURCE_MODE_LABEL: Record<InputSourceMode, string> = {
   webhook: "Webhook",
   database: "Database",
   google_drive: "Google Drive",
+  github_repo: "GitHub Repo",
+  github_file: "GitHub File",
+  github_issues: "GitHub Issues",
+  github_pull_requests: "GitHub PRs",
 };
 
 export const SOURCE_MODE_OPTIONS: { mode: InputSourceMode; label: string; hint: string }[] = [
   { mode: "input_studio", label: "Input Studio", hint: "Generated, reusable Seed Dataset" },
   { mode: "live_api", label: "Live API", hint: "Real tool / API call at run time" },
   { mode: "google_drive", label: "Google Drive", hint: "Selected Drive files / Docs / Sheets" },
+  { mode: "github_repo", label: "GitHub Repo", hint: "A connected repository's file tree" },
+  { mode: "github_file", label: "GitHub File", hint: "A specific file from a connected repo" },
+  { mode: "github_issues", label: "GitHub Issues", hint: "Issues for triage / release notes" },
+  { mode: "github_pull_requests", label: "GitHub PRs", hint: "Pull requests for review / changelog" },
   { mode: "previous_take", label: "Previous Take", hint: "An earlier run's output table" },
   { mode: "uploaded_file", label: "Uploaded File", hint: "A file you bring in" },
   { mode: "manual_table", label: "Manual Table", hint: "Hand-entered rows" },

@@ -1,10 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Download, FileCheck2, Loader2, Minus, Package, TriangleAlert, X, XCircle } from "lucide-react";
+import { Check, Download, FileCheck2, GitBranch, GitPullRequest, Loader2, Minus, Package, TriangleAlert, X, XCircle } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { EXPORT_MODE_META, EXPORT_MODES, type ExportHealthStatus, type ExportMode } from "@/lib/export/schema";
+import { GitHubExportPanel } from "@/components/github/GitHubExportPanel";
+import { GithubMark } from "@/components/github/GithubMark";
 import { cn } from "@/lib/ui/cn";
+
+type Destination = "download" | "github_branch" | "github_pr";
+
+const DESTINATIONS: { id: Destination; label: string; icon: typeof Download }[] = [
+  { id: "download", label: "Download ZIP", icon: Download },
+  { id: "github_branch", label: "Push to GitHub", icon: GitBranch },
+  { id: "github_pr", label: "Create PR", icon: GitPullRequest },
+];
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   ready: { label: "Ready", color: "#34d399" },
@@ -30,6 +40,8 @@ export function ExportDialog() {
   const setNotice = usePipelineStore((s) => s.setNotice);
 
   const [selected, setSelected] = useState<Set<ExportMode>>(new Set(EXPORT_MODES));
+  const [destination, setDestination] = useState<Destination>("download");
+  const isGitHub = destination !== "download";
 
   const blocked = health?.status === "blocked";
   const fileTypeCounts = useMemo(() => {
@@ -68,7 +80,7 @@ export function ExportDialog() {
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm" onClick={closeExport}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="fm-fade-up flex max-h-full w-[520px] flex-col overflow-hidden rounded-2xl glass-strong shadow-[0_24px_64px_rgba(0,0,0,0.6)]"
+        className="fm-fade-up relative flex max-h-full w-[520px] flex-col overflow-hidden rounded-2xl glass-strong shadow-[0_24px_64px_rgba(0,0,0,0.6)]"
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <div className="flex items-center gap-2">
@@ -83,6 +95,27 @@ export function ExportDialog() {
           <button onClick={closeExport} className="text-ink-faint transition hover:text-ink">
             <X size={16} />
           </button>
+        </div>
+
+        {/* Destination tabs */}
+        <div className="flex items-center gap-1 border-b border-line px-3 py-2">
+          {DESTINATIONS.map((d) => {
+            const on = destination === d.id;
+            const Icon = d.icon;
+            return (
+              <button
+                key={d.id}
+                onClick={() => setDestination(d.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] transition",
+                  on ? "bg-violet/15 text-violet" : "text-ink-faint hover:text-ink",
+                )}
+              >
+                {d.id !== "download" ? <GithubMark size={12} /> : <Icon size={12} />}
+                {d.label}
+              </button>
+            );
+          })}
         </div>
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3.5">
@@ -148,7 +181,13 @@ export function ExportDialog() {
             })}
           </div>
 
-          {manifest && (
+          {isGitHub && (
+            <div className="rounded-xl border border-line bg-white/[0.02] p-3">
+              <GitHubExportPanel modes={[...selected]} createPullRequest={destination === "github_pr"} />
+            </div>
+          )}
+
+          {!isGitHub && manifest && (
             <div className="rounded-xl border border-violet/30 bg-violet/[0.05] p-2.5 text-[11.5px]">
               <div className="flex items-center gap-1.5 text-ink">
                 <Download size={13} className="text-violet" /> Exported {manifest.fileCount} files
@@ -167,21 +206,27 @@ export function ExportDialog() {
             Copy summary
           </button>
           <div className="flex-1" />
-          <button
-            onClick={() => void runExport([...EXPORT_MODES])}
-            disabled={exporting || blocked}
-            className="rounded-lg border border-line-strong bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
-          >
-            Export all
-          </button>
-          <button
-            onClick={() => void runExport([...selected])}
-            disabled={exporting || blocked || selected.size === 0}
-            className="flex items-center gap-1.5 rounded-lg bg-violet px-3.5 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
-          >
-            {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-            Export selected
-          </button>
+          {isGitHub ? (
+            <span className="text-[10.5px] text-ink-faint">{selected.size} mode(s) included in the repo export</span>
+          ) : (
+            <>
+              <button
+                onClick={() => void runExport([...EXPORT_MODES])}
+                disabled={exporting || blocked}
+                className="rounded-lg border border-line-strong bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
+              >
+                Export all
+              </button>
+              <button
+                onClick={() => void runExport([...selected])}
+                disabled={exporting || blocked || selected.size === 0}
+                className="flex items-center gap-1.5 rounded-lg bg-violet px-3.5 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
+              >
+                {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                Export selected
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

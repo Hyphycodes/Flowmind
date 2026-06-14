@@ -7,6 +7,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { ProviderStatus } from "@/components/models/ProviderStatus";
 import { ToolRegistry } from "@/components/tools/ToolRegistry";
 import { ConnectedAccounts } from "@/components/auth/ConnectedAccounts";
+import { GitHubConnection } from "@/components/github/GitHubConnection";
 
 type Status = { anthropic: boolean; model: string; supabase: boolean };
 
@@ -34,7 +35,10 @@ export default function SettingsPage() {
             <h2 className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Connected accounts</h2>
             <Link href="/account" className="text-[11px] text-violet hover:underline">Account →</Link>
           </div>
-          <ConnectedAccounts />
+          <div className="space-y-2.5">
+            <ConnectedAccounts />
+            <GitHubConnection />
+          </div>
         </section>
 
         <ProviderStatus />

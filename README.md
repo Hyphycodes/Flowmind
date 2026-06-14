@@ -100,6 +100,23 @@ are deliberately separate. OAuth tokens are AES-256-GCM encrypted server-side
 appears as a Source Mode + tool registry entries. See
 [`docs/AUTH.md`](docs/AUTH.md) and [`docs/GOOGLE_DRIVE_CONNECTOR.md`](docs/GOOGLE_DRIVE_CONNECTOR.md).
 
+## GitHub: push to a repo & open a PR
+
+Beyond the ZIP, Flowmind can **push a finished AI system into a real GitHub repo as a branch or
+pull request** — _"I put the AI system into your repo and opened a PR."_ GitHub **login**, repo
+**connection**, and PR **export** are three separate concepts. Repo access uses a **GitHub App**
+(preferred over personal tokens): set `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, and
+`NEXT_PUBLIC_GITHUB_APP_SLUG`, then apply migration `0008` (after `0007`).
+
+Installation tokens are minted server-side on demand and are **never** sent to the client, stored
+in pipeline JSON, or exported. GitHub export **reuses the same export bundle**, runs a secret scan,
+creates a branch (existing files are versioned — never overwritten), commits the files, and
+optionally opens a PR with a generated description; it can also draft **implementation issues** from
+the Reality Meter. GitHub is also a Source/Tool (repo tree, read file, list issues/PRs). See
+[`docs/GITHUB_INTEGRATION.md`](docs/GITHUB_INTEGRATION.md),
+[`docs/GITHUB_EXPORT.md`](docs/GITHUB_EXPORT.md), and
+[`docs/REPO_SOURCE_NODES.md`](docs/REPO_SOURCE_NODES.md).
+
 ## Deploy (Vercel)
 
 Set the same env vars in your Vercel project (`ANTHROPIC_API_KEY` plus the two
@@ -155,6 +172,7 @@ page groups cards by pack with node/team/agent/table counts and a readiness scor
 - [`docs/EXPORT_FORMAT.md`](docs/EXPORT_FORMAT.md) — export modes + ZIP layout.
 - [`docs/TEMPLATE_PACKS.md`](docs/TEMPLATE_PACKS.md) — the packs and their templates.
 - [`docs/AUTH.md`](docs/AUTH.md) · [`docs/GOOGLE_DRIVE_CONNECTOR.md`](docs/GOOGLE_DRIVE_CONNECTOR.md) · [`docs/ONBOARDING.md`](docs/ONBOARDING.md) · [`docs/RLS_SECURITY.md`](docs/RLS_SECURITY.md) — accounts, Drive, onboarding, security.
+- [`docs/GITHUB_INTEGRATION.md`](docs/GITHUB_INTEGRATION.md) · [`docs/GITHUB_EXPORT.md`](docs/GITHUB_EXPORT.md) · [`docs/REPO_SOURCE_NODES.md`](docs/REPO_SOURCE_NODES.md) — GitHub App connection, repo/PR export, repo source nodes.
 
 ## Scripts
 

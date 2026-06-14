@@ -91,11 +91,16 @@ const SCHEMA_DESCRIPTORS: Record<string, { description: string; fields: string[]
   "run-trace": { description: "A full execution record.", fields: ["id", "status", "steps[]", "tables[]", "teamRuns[]", "agentRuns[]", "packets[]", "evalResults[]", "costUsd", "latencyMs"] },
 };
 
-/** Build the export ZIP for the selected modes, returning the blob + manifest. */
-export async function createExportBundle(
+/** A single generated export file (path + raw text). Reused by the ZIP path and the
+ *  GitHub repo-export path so export logic is never duplicated. */
+export type ExportFile = { path: string; content: string; type: ExportFileType; description?: string };
+
+/** Collect every export file (pure, no ZIP / no `file-saver`) for the selected modes.
+ *  Both `createExportBundle` (download) and the GitHub repo export reuse this. */
+export function collectExportFiles(
   ctx: ExportContext,
   modes: ExportMode[],
-): Promise<{ blob: Blob; manifest: ExportManifest; slug: string }> {
+): { files: ExportFile[]; manifest: ExportManifest; slug: string } {
   const p = ctx.pipeline;
   const run = ctx.run ?? null;
   const drop = ctx.productDrop ?? generateProductDrop(p);
@@ -109,12 +114,12 @@ export async function createExportBundle(
   const datasets = run?.datasets ?? [];
   const takes = run?.takes ?? [];
 
-  const zip = new JSZip();
+  const out: ExportFile[] = [];
   const files: ExportManifestFile[] = [];
   const inferType = (path: string): ExportFileType =>
     path.endsWith(".json") ? "json" : path.endsWith(".md") ? "markdown" : path.endsWith(".ts") || path.endsWith(".tsx") ? "typescript" : "text";
   const put = (path: string, content: string, description?: string) => {
-    zip.file(path, content);
+    out.push({ path, content, type: inferType(path), description });
     files.push({ path, type: inferType(path), description });
   };
   const json = (path: string, value: unknown, description?: string) => put(path, JSON.stringify(value, null, 2), description);
@@ -249,10 +254,21 @@ export async function createExportBundle(
     files: [...files, { path: "export-manifest.json", type: "json", description: "This manifest" }],
     healthCheck,
   };
-  zip.file("export-manifest.json", JSON.stringify(manifest, null, 2));
+  out.push({ path: "export-manifest.json", content: JSON.stringify(manifest, null, 2), type: "json", description: "This manifest" });
 
+  return { files: out, manifest, slug: slugify(drop.name) };
+}
+
+/** Build the export ZIP for the selected modes, returning the blob + manifest. */
+export async function createExportBundle(
+  ctx: ExportContext,
+  modes: ExportMode[],
+): Promise<{ blob: Blob; manifest: ExportManifest; slug: string }> {
+  const { files, manifest, slug } = collectExportFiles(ctx, modes);
+  const zip = new JSZip();
+  for (const f of files) zip.file(f.path, f.content);
   const blob = await zip.generateAsync({ type: "blob" });
-  return { blob, manifest, slug: slugify(drop.name) };
+  return { blob, manifest, slug };
 }
 
 /** Build + download the export ZIP. Returns the manifest for history/persistence. */

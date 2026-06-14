@@ -69,6 +69,10 @@ export const SOURCE_MODES = [
   "webhook",
   "database",
   "google_drive",
+  "github_repo",
+  "github_file",
+  "github_issues",
+  "github_pull_requests",
 ] as const;
 export type InputSourceMode = (typeof SOURCE_MODES)[number];
 
@@ -226,12 +230,24 @@ export const googleDriveSourceConfigSchema = z.object({
 });
 export type GoogleDriveSourceConfig = z.infer<typeof googleDriveSourceConfigSchema>;
 
+/** GitHub source binding (mode = github_repo / github_file / github_issues / github_pull_requests).
+ *  Holds only references — never tokens. */
+export const githubSourceConfigSchema = z.object({
+  repositoryFullName: z.string().optional(),
+  ref: z.string().optional(),
+  path: z.string().optional(),
+  issueState: z.enum(["open", "closed", "all"]).default("open").optional(),
+});
+export type GitHubSourceConfig = z.infer<typeof githubSourceConfigSchema>;
+
 export const sourceConfigSchema = z.object({
   mode: z.enum(SOURCE_MODES).default("input_studio"),
   datasetId: z.string().optional(),
   datasetName: z.string().optional(),
   /** Google Drive binding (mode = "google_drive") */
   drive: googleDriveSourceConfigSchema.optional(),
+  /** GitHub binding (mode = github_*) */
+  github: githubSourceConfigSchema.optional(),
   /** dataset/source to fall back to when a live tool has no key */
   fallbackDatasetId: z.string().optional(),
   toolId: z.string().optional(),

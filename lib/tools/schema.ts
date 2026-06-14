@@ -20,6 +20,8 @@ export const TOOL_CATEGORIES = [
   "memory",
   "dataset",
   "developer",
+  "code",
+  "source",
   "other",
 ] as const;
 export type ToolCategory = (typeof TOOL_CATEGORIES)[number];

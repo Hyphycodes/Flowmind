@@ -97,9 +97,25 @@ additive + optional so existing pipelines stay valid.
   to the client, stored in pipeline JSON, or exported. SSR auth via `lib/supabase/browser.ts`
   + `serverClient.ts`; the legacy anon `client.ts` stays for the demo data path. RLS migration
   `0007` is transitional — apply only after enabling auth; don't hand-hack the DB.
-- **Persistence.** `supabase/migrations/` runs `0001`–`0006`. Later migrations are additive +
-  optional (saveDataset/saveTake/saveExport degrade gracefully without them). Use migrations,
-  never hand-hack the DB.
+- **GitHub integration (Prompt 10).** Repo export / PR / issues. Three SEPARATE concepts —
+  GitHub **login** ≠ **repo connection** ≠ **PR export**; don't blur them. Repo access uses a
+  **GitHub App** (preferred over personal tokens), config-gated by `githubConfigured()`
+  (`GITHUB_APP_ID` + `GITHUB_APP_PRIVATE_KEY` + `NEXT_PUBLIC_GITHUB_APP_SLUG` + auth + encryption
+  secret). Installation access tokens are minted **server-side on demand** from the App private
+  key (`lib/github/app.ts`) and are **never** sent to the client, stored in pipeline JSON, or
+  exported — only connection METADATA persists (`github_connections`). GitHub export **reuses the
+  existing export bundle** via `collectExportFiles` (pure, no JSZip) → `POST /api/github/export`
+  creates a branch, commits files (existing files are **versioned, never overwritten**), and
+  optionally opens a PR with a generated body; an export **secret scan**
+  (`lib/github/secretScan.ts`) blocks leaks before any write. Issues come from the Reality Meter +
+  health check (`lib/github/issues.ts`). GitHub also works as a **source/tool** (modes
+  `github_repo`/`github_file`/`github_issues`/`github_pull_requests`; registry tools). Library in
+  `lib/github/*`; UI in `components/github/*` + the Export dialog's GitHub tabs. Don't design
+  around copy-pasted personal access tokens. Docs: `docs/GITHUB_INTEGRATION.md`,
+  `docs/GITHUB_EXPORT.md`, `docs/REPO_SOURCE_NODES.md`.
+- **Persistence.** `supabase/migrations/` runs `0001`–`0008`. Later migrations are additive +
+  optional (saveDataset/saveTake/saveExport + GitHub records degrade gracefully without them).
+  Migration `0008` (GitHub) applies after `0007` (auth). Use migrations, never hand-hack the DB.
 
 ## Stack
 

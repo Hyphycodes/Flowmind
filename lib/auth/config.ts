@@ -33,3 +33,34 @@ export function appUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, "");
   return fromEnv || "http://localhost:3000";
 }
+
+/* ── GitHub (repo export / PR workflow — Prompt 10) ─────────────────────
+ * GitHub login ≠ repo access. Repo access uses a GitHub App (preferred) so
+ * permissions are repo-scoped and tokens stay server-side, never exported. */
+
+/** Public GitHub App slug (used to build the install URL). Client-safe. */
+export function githubAppSlug(): string | null {
+  return process.env.NEXT_PUBLIC_GITHUB_APP_SLUG || null;
+}
+
+/** GitHub App credentials present (server-only). Required to mint installation tokens. */
+export function githubAppConfigured(): boolean {
+  return Boolean(
+    process.env.GITHUB_APP_ID &&
+      process.env.GITHUB_APP_PRIVATE_KEY &&
+      process.env.NEXT_PUBLIC_GITHUB_APP_SLUG,
+  );
+}
+
+/** OAuth-app fallback present (server-only). Used only if a GitHub App isn't configured. */
+export function githubOAuthConfigured(): boolean {
+  return Boolean(
+    (process.env.GITHUB_APP_CLIENT_ID && process.env.GITHUB_APP_CLIENT_SECRET) ||
+      (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+  );
+}
+
+/** GitHub repo connection ready end-to-end (App + encryption + auth). Server-only. */
+export function githubConfigured(): boolean {
+  return githubAppConfigured() && tokenEncryptionConfigured() && authConfigured();
+}
