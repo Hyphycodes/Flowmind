@@ -50,6 +50,7 @@ import { explainProductBlueprint, type ExplainAudience } from "@/lib/product/exp
 import { downloadExportBundle, type ExportContext } from "@/lib/export/bundle";
 import { buildExportHealthCheck } from "@/lib/export/healthCheck";
 import type { ExportHealthCheck, ExportManifest, ExportMode } from "@/lib/export/schema";
+import type { FeatureGateResult } from "@/lib/billing/types";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
@@ -126,6 +127,9 @@ interface PipelineState {
   exportHealth: ExportHealthCheck | null;
   lastExportManifest: ExportManifest | null;
 
+  /** Billing: upgrade prompt shown when a feature gate blocks an action */
+  upgradeGate: (FeatureGateResult & { title?: string }) | null;
+
   saveStatus: SaveStatus;
   generating: boolean;
   notice: string | null;
@@ -179,6 +183,8 @@ interface PipelineState {
   /** Export system */
   openExport: () => void;
   closeExport: () => void;
+  openUpgrade: (gate: FeatureGateResult & { title?: string }) => void;
+  closeUpgrade: () => void;
   runExport: (modes: ExportMode[]) => Promise<void>;
 
   generate: (description: string) => Promise<void>;
@@ -268,6 +274,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     exporting: false,
     exportHealth: null,
     lastExportManifest: null,
+    upgradeGate: null,
     saveStatus: "idle",
     generating: false,
     notice: null,
@@ -666,6 +673,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
 
     closeExport: () => set({ exportOpen: false }),
 
+    openUpgrade: (gate) => set({ upgradeGate: gate }),
+    closeUpgrade: () => set({ upgradeGate: null }),
+
     runExport: async (modes) => {
       const s = get();
       const p = s.pipeline;
@@ -875,6 +885,10 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         });
         if (!res.ok || !res.body) {
           const j = await res.json().catch(() => ({}));
+          // Billing gate (402): show the upgrade modal instead of a bare error.
+          if (res.status === 402 && j.gate) {
+            get().openUpgrade({ ...j.gate, title: "Out of credits" });
+          }
           set({
             runStatus: "error",
             runError: j.error ?? "Run failed.",

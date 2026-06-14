@@ -117,6 +117,21 @@ the Reality Meter. GitHub is also a Source/Tool (repo tree, read file, list issu
 [`docs/GITHUB_EXPORT.md`](docs/GITHUB_EXPORT.md), and
 [`docs/REPO_SOURCE_NODES.md`](docs/REPO_SOURCE_NODES.md).
 
+## Billing, credits & plans
+
+The business layer: **plans** (Free / Pro / Studio / Enterprise), a **credit system**, **usage
+logging**, central **feature gates**, and **Stripe**. It's **off by default** — set
+`NEXT_PUBLIC_BILLING_ENABLED=true` to enforce it; otherwise the public demo runs unlimited/free and
+gates always allow. Credits are the user-facing unit (we never invent exact provider dollar costs).
+
+Real AI runs, Input Studio generation, and GitHub PR export are gated; a blocked action opens a calm
+**upgrade modal** that always offers a non-paywall path ("Download ZIP instead"). The sidebar shows a
+live **usage meter**; `/settings/billing` and `/pricing` show plans + usage. Stripe runs through the
+REST API with **webhook signature verification**; the secret key is server-only and never exposed.
+Apply migration `0009` (after `0007`). See
+[`docs/BILLING.md`](docs/BILLING.md), [`docs/CREDITS_AND_USAGE.md`](docs/CREDITS_AND_USAGE.md),
+[`docs/PLANS.md`](docs/PLANS.md), and [`docs/STRIPE_SETUP.md`](docs/STRIPE_SETUP.md).
+
 ## Deploy (Vercel)
 
 Set the same env vars in your Vercel project (`ANTHROPIC_API_KEY` plus the two
@@ -173,6 +188,7 @@ page groups cards by pack with node/team/agent/table counts and a readiness scor
 - [`docs/TEMPLATE_PACKS.md`](docs/TEMPLATE_PACKS.md) — the packs and their templates.
 - [`docs/AUTH.md`](docs/AUTH.md) · [`docs/GOOGLE_DRIVE_CONNECTOR.md`](docs/GOOGLE_DRIVE_CONNECTOR.md) · [`docs/ONBOARDING.md`](docs/ONBOARDING.md) · [`docs/RLS_SECURITY.md`](docs/RLS_SECURITY.md) — accounts, Drive, onboarding, security.
 - [`docs/GITHUB_INTEGRATION.md`](docs/GITHUB_INTEGRATION.md) · [`docs/GITHUB_EXPORT.md`](docs/GITHUB_EXPORT.md) · [`docs/REPO_SOURCE_NODES.md`](docs/REPO_SOURCE_NODES.md) — GitHub App connection, repo/PR export, repo source nodes.
+- [`docs/BILLING.md`](docs/BILLING.md) · [`docs/CREDITS_AND_USAGE.md`](docs/CREDITS_AND_USAGE.md) · [`docs/PLANS.md`](docs/PLANS.md) · [`docs/STRIPE_SETUP.md`](docs/STRIPE_SETUP.md) — billing, credits, plans, Stripe setup.
 
 ## Scripts
 

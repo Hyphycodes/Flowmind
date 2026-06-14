@@ -12,6 +12,9 @@ import {
   defaultBranchName,
 } from "@/lib/github/pullRequests";
 import type { GitHubExportTarget } from "@/lib/github/types";
+import { getBillingAccount, logCreditEvent, incrementUsageCounter } from "@/lib/billing/usage";
+import { canCreateGitHubPr } from "@/lib/billing/featureGates";
+import { CREDIT_COST } from "@/lib/billing/credits";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -46,6 +49,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid pipeline", details: parsedPipeline.error.flatten() }, { status: 400 });
   }
   const pipeline = parsedPipeline.data;
+
+  // Billing gate: GitHub PR export is a Pro/Studio feature + monthly limit (no-op when off).
+  if (target.createPullRequest) {
+    const account = await getBillingAccount();
+    const gate = canCreateGitHubPr(account);
+    if (!gate.allowed) return Response.json({ error: gate.reason ?? "GitHub PR export not available", gate }, { status: 402 });
+  }
 
   const client = await clientForRepo(ctx, target.repository.owner, target.repository.name);
   if ("error" in client) return Response.json({ error: client.error }, { status: ERROR_STATUS[client.error] });
@@ -126,6 +136,15 @@ export async function POST(req: Request) {
     });
   } catch {
     // table not migrated yet — ignore
+  }
+
+  // Billing: count the export + (for PRs) a small credit + counter (no-op when billing is off).
+  if (result.status !== "error") {
+    void incrementUsageCounter("exports", 1);
+    if (target.createPullRequest && result.pullRequestUrl) {
+      void incrementUsageCounter("githubPrExports", 1);
+      void logCreditEvent({ eventType: "github_pr_export", creditsDelta: -CREDIT_COST.githubPrExport, pipelineId: pipeline.id });
+    }
   }
 
   return Response.json({ result });

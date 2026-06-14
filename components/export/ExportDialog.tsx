@@ -6,6 +6,7 @@ import { usePipelineStore } from "@/store/pipelineStore";
 import { EXPORT_MODE_META, EXPORT_MODES, type ExportHealthStatus, type ExportMode } from "@/lib/export/schema";
 import { GitHubExportPanel } from "@/components/github/GitHubExportPanel";
 import { GithubMark } from "@/components/github/GithubMark";
+import { CreditEstimate } from "@/components/billing/CreditEstimate";
 import { cn } from "@/lib/ui/cn";
 
 type Destination = "download" | "github_branch" | "github_pr";
@@ -180,6 +181,15 @@ export function ExportDialog() {
               );
             })}
           </div>
+
+          <CreditEstimate
+            request={{
+              kind: "export",
+              modes: [...selected],
+              regenerateDocs: true,
+              githubPr: destination === "github_pr",
+            }}
+          />
 
           {isGitHub && (
             <div className="rounded-xl border border-line bg-white/[0.02] p-3">

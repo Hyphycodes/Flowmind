@@ -64,3 +64,22 @@ export function githubOAuthConfigured(): boolean {
 export function githubConfigured(): boolean {
   return githubAppConfigured() && tokenEncryptionConfigured() && authConfigured();
 }
+
+/* ── Billing / credits / plans (Prompt 11) ──────────────────────────────
+ * Billing is OFF by default so the public demo runs unlimited/free. Flip
+ * NEXT_PUBLIC_BILLING_ENABLED=true to enforce plan limits + credit gating. */
+
+/** Show + enforce billing (plans, credits, gates). Client-safe. */
+export function billingEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_BILLING_ENABLED === "true";
+}
+
+/** Stripe secret present → checkout/portal/webhook are live. Server-only. */
+export function stripeConfigured(): boolean {
+  return Boolean(process.env.STRIPE_SECRET_KEY);
+}
+
+/** Stripe webhook signature verification possible. Server-only. */
+export function stripeWebhookConfigured(): boolean {
+  return Boolean(process.env.STRIPE_WEBHOOK_SECRET);
+}

@@ -32,6 +32,20 @@ export default function SettingsPage() {
 
         <section>
           <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Plan &amp; billing</h2>
+            <Link href="/settings/billing" className="text-[11px] text-violet hover:underline">Billing →</Link>
+          </div>
+          <Link
+            href="/settings/billing"
+            className="flex items-center justify-between rounded-xl border border-line bg-white/[0.02] p-3.5 transition hover:bg-white/[0.04]"
+          >
+            <span className="text-[13px] text-ink">Plans, credits, and usage</span>
+            <span className="text-[12px] text-violet">Manage →</span>
+          </Link>
+        </section>
+
+        <section>
+          <div className="mb-2 flex items-center justify-between">
             <h2 className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">Connected accounts</h2>
             <Link href="/account" className="text-[11px] text-violet hover:underline">Account →</Link>
           </div>

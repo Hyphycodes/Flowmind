@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BookOpen, Layers, Library, LogIn, Play, Plus, Settings } from "lucide-react";
+import { UsageMeter } from "@/components/billing/UsageMeter";
 import { cn } from "@/lib/ui/cn";
 
 const NAV = [
@@ -53,42 +54,10 @@ export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
       </nav>
 
       <div className="mt-auto space-y-4">
-        <UsageCard />
+        <UsageMeter />
         <ProfileCard />
       </div>
     </aside>
-  );
-}
-
-function UsageCard() {
-  return (
-    <div className="rounded-xl border border-line bg-white/[0.02] p-3.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-ink">Pro Plan</span>
-        <Link href="/settings" className="text-[11px] text-violet hover:underline">
-          Upgrade
-        </Link>
-      </div>
-      <div className="mt-3 space-y-2.5">
-        <Meter label="Pipelines" value="12 / 25" pct={48} accent="#8b5cf6" />
-        <Meter label="Runs" value="423 / 1000" pct={42} accent="#4f8bff" />
-        <Meter label="Storage" value="8.4 / 50 GB" pct={17} accent="#2dd4bf" />
-      </div>
-    </div>
-  );
-}
-
-function Meter({ label, value, pct, accent }: { label: string; value: string; pct: number; accent: string }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-ink-dim">{label}</span>
-        <span className="text-ink-faint">{value}</span>
-      </div>
-      <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: accent }} />
-      </div>
-    </div>
   );
 }
 

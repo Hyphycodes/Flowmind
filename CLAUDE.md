@@ -113,9 +113,24 @@ additive + optional so existing pipelines stay valid.
   `lib/github/*`; UI in `components/github/*` + the Export dialog's GitHub tabs. Don't design
   around copy-pasted personal access tokens. Docs: `docs/GITHUB_INTEGRATION.md`,
   `docs/GITHUB_EXPORT.md`, `docs/REPO_SOURCE_NODES.md`.
-- **Persistence.** `supabase/migrations/` runs `0001`–`0008`. Later migrations are additive +
-  optional (saveDataset/saveTake/saveExport + GitHub records degrade gracefully without them).
-  Migration `0008` (GitHub) applies after `0007` (auth). Use migrations, never hand-hack the DB.
+- **Billing / credits (Prompt 11).** Plans, credits, usage, feature gates, Stripe. OFF by default
+  (`billingEnabled()` ← `NEXT_PUBLIC_BILLING_ENABLED`) so the public demo runs unlimited/free —
+  when off, every gate returns `{allowed:true}` and nothing is charged. **Centralize ALL plan
+  checks in `lib/billing/featureGates.ts`** — never scatter plan logic. Plans are config-driven
+  (`lib/billing/plans.ts`, prices from env). Credits are deterministic + the user-facing
+  abstraction (`lib/billing/credits.ts`) — **never invent exact provider dollar costs**. Usage +
+  balance + logging are server-side + best-effort (`lib/billing/usage.ts`, degrade without the
+  tables). Gating is applied in `app/api/run` (402 → store opens `UpgradeModal`), `app/api/
+  input-studio`, and `app/api/github/export`; basic ZIP export stays available. Stripe via REST +
+  webhook signature verification (`lib/billing/stripe.ts`) — **never expose `STRIPE_SECRET_KEY`**
+  (webhook writes via `serviceClient.ts`). BYOK is schema/doc-represented (`user_model_keys`,
+  encrypted refs only). UI: sidebar `UsageMeter`, `/settings/billing`, `/pricing`, `UpgradeModal`,
+  `CreditEstimate` (TopBar + Export). Routes `app/api/billing/*`. Docs: `docs/BILLING.md`,
+  `CREDITS_AND_USAGE.md`, `PLANS.md`, `STRIPE_SETUP.md`.
+- **Persistence.** `supabase/migrations/` runs `0001`–`0009`. Later migrations are additive +
+  optional (saveDataset/saveTake/saveExport + GitHub + billing records degrade gracefully without
+  them). `0008` (GitHub) + `0009` (billing) apply after `0007` (auth). Use migrations, never
+  hand-hack the DB.
 
 ## Stack
 

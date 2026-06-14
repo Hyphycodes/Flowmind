@@ -12,6 +12,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
+import { CreditEstimate } from "@/components/billing/CreditEstimate";
 import { cn } from "@/lib/ui/cn";
 
 export function TopBar() {
@@ -95,6 +96,7 @@ export function TopBar() {
           <option value="hybrid">Hybrid</option>
           <option value="live">Live</option>
         </select>
+        {pipeline && !running && <CreditEstimate request={{ kind: "run", pipeline }} compact />}
         <button
           type="button"
           onClick={() => void runPipeline()}

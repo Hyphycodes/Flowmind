@@ -17,6 +17,9 @@ import {
   type TeamRunTrace,
 } from "@/lib/pipeline/schema";
 import { newId } from "@/lib/pipeline/validate";
+import { getBillingAccount, recordRunSpend } from "@/lib/billing/usage";
+import { estimateCreditsForRun } from "@/lib/billing/credits";
+import { canRunPipeline } from "@/lib/billing/featureGates";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -150,6 +153,16 @@ export async function POST(req: Request) {
         return parsedTable.success ? [parsedTable.data] : [];
       })
     : [];
+  // ── Billing gate (full runs only). No-op unless NEXT_PUBLIC_BILLING_ENABLED=true. ──
+  const runEstimate = estimateCreditsForRun(pipeline, { onlyNodeId });
+  if (!onlyNodeId) {
+    const account = await getBillingAccount();
+    const gate = canRunPipeline(account, runEstimate);
+    if (!gate.allowed) {
+      return Response.json({ error: gate.reason ?? "Out of credits", gate, estimate: runEstimate }, { status: 402 });
+    }
+  }
+
   const order = onlyNodeId ? [onlyNodeId] : topoOrder(pipeline);
   const enc = new TextEncoder();
 
@@ -287,6 +300,15 @@ export async function POST(req: Request) {
           costUsd: teamRuns.reduce((sum, trace) => sum + (trace.costUsd ?? 0), 0),
         };
         send({ kind: "run-done", status: "success", finalOutput, runTrace });
+        // Record credit spend + run count (best-effort; no-op unless billing is enabled + full run).
+        if (!onlyNodeId) {
+          void recordRunSpend({
+            credits: runEstimate.credits,
+            pipelineId: pipeline.id,
+            runId,
+            modelCostEstimate: { usd: runTrace.costUsd },
+          });
+        }
       } catch (err) {
         const runTrace: RunTrace = {
           id: runId,
