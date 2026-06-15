@@ -25,6 +25,7 @@ import {
   type RunTrace,
   type Take,
   type TeamRunTrace,
+  type TeamStrategy,
 } from "@/lib/pipeline/schema";
 import { hasSupabase } from "@/lib/supabase/client";
 import {
@@ -38,6 +39,7 @@ import {
 } from "@/lib/supabase/queries";
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
+import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
 import { newId } from "@/lib/pipeline/validate";
 import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
 import { applyRepair, type RepairAction } from "@/lib/datasets/repair";
@@ -141,6 +143,12 @@ interface PipelineState {
   selectNode: (id: string | null) => void;
   patchNode: (id: string, patch: Partial<PipelineNode>) => void;
   setNodePrompt: (id: string, prompt: string) => void;
+  /** Team Coordinator: change strategy / add / remove members → re-coordinate
+   *  (rebuild controllers + internal wiring + identity) deterministically. */
+  setTeamStrategy: (nodeId: string, strategy: TeamStrategy) => void;
+  addTeamAgent: (nodeId: string) => void;
+  removeTeamAgent: (nodeId: string, agentId: string) => void;
+  coordinateTeam: (nodeId: string) => void;
   setNodePosition: (id: string, position: Pos) => void;
   setMockInput: (key: string, value: string) => void;
   renamePipeline: (name: string) => void;
@@ -338,6 +346,48 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
 
     setNodePrompt: (id, prompt) =>
       mutate((p) => ({ ...p, nodes: p.nodes.map((n) => (n.id === id ? { ...n, prompt } : n)) })),
+
+    setTeamStrategy: (nodeId, strategy) =>
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) =>
+          n.id === nodeId && n.team ? coordinateTeamNode({ ...n, team: { ...n.team, strategy } }) : n,
+        ),
+      })),
+
+    coordinateTeam: (nodeId) =>
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) => (n.id === nodeId && n.team ? coordinateTeamNode(n) : n)),
+      })),
+
+    addTeamAgent: (nodeId) =>
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) => {
+          if (n.id !== nodeId || !n.team) return n;
+          const members = n.team.agents.filter((a) => !a.isController);
+          const newAgent = {
+            id: `${nodeId}_a_${newId().slice(0, 6)}`,
+            name: `Agent ${members.length + 1}`,
+            role: "",
+            prompt: "",
+            model: members[0]?.model ?? "claude-sonnet-4-6",
+            toolAttachments: [],
+          };
+          return coordinateTeamNode({ ...n, team: { ...n.team, agents: [...members, newAgent] } });
+        }),
+      })),
+
+    removeTeamAgent: (nodeId, agentId) =>
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) => {
+          if (n.id !== nodeId || !n.team) return n;
+          const members = n.team.agents.filter((a) => !a.isController && a.id !== agentId);
+          return coordinateTeamNode({ ...n, team: { ...n.team, agents: members } });
+        }),
+      })),
 
     setNodePosition: (id, position) =>
       mutate((p) => ({ ...p, nodes: p.nodes.map((n) => (n.id === id ? { ...n, position } : n)) })),

@@ -68,10 +68,24 @@ additive + optional so existing pipelines stay valid.
   are derived from the output node's `display`, not asked of the model. Docs: `docs/ARCHITECT.md`.
 - **Team Nodes / Crew Rooms.** A `PipelineNode.team` (`lib/pipeline/schema.ts`) holds a
   `strategy` (single/sequential/parallel/debate/vote/router/council) + `agents[]` + a
-  `lead`. The canvas shows departments; selecting a team node opens the **Crew Room**
-  (`components/panels/NodeInspector.tsx`) — agents, lead, models, mute. `executeNode`
-  branches on `team`. Do not remove the `team` field. Don't show all sub-agents on the
-  main canvas by default.
+  `lead`. `agents[]` holds both portable **members** and the **controllers** the Team
+  Coordinator builds (flagged `isController` + `controllerKind`). The canvas shows
+  departments; selecting a team node opens the **Crew Room**
+  (`components/panels/NodeInspector.tsx`) — members + controllers (styled distinctly), a
+  strategy selector, add/remove member, models, mute, a scroll list + member/controller
+  counts (a pipeline can hold **50+ agents** across its teams). `executeNode` branches on
+  `team`: controllers don't run as workers — the controller is the synthesis chair. Do not
+  remove the `team` field. Don't show all sub-agents on the main canvas by default.
+- **Team Coordinator (Prompt 03).** `lib/pipeline/teamCoordinator.ts` —
+  `coordinateTeamNode(node)`, a **deterministic** (no-LLM, scales to big crews) function that
+  gives a team its identity (title/role) and internal coordination: it builds the visible
+  controller node(s) a strategy needs (parallel/vote → Aggregator, debate → Judge, router →
+  Router; sequential → none), derives the lead, and wires `team.internalEdges` with reserved
+  `input`/`output` boundary endpoints. It never rewrites a member's prompt. Re-run it whenever
+  membership/strategy changes — the Architect runs generated teams through it, and the store
+  (`setTeamStrategy`/`addTeamAgent`/`removeTeamAgent`/`coordinateTeam`) re-runs it on Crew Room
+  edits. The team's declared `inputs`/`outputs` stay the stable downstream contract.
+  Docs: `docs/TEAM_COORDINATOR.md`.
 - **Handoff Packets.** Slim compressed output passed between teams
   (`lib/packets/*`, `handoffPacketSchema`): summary, key fields, confidence, assumptions,
   missing data, warnings, field changes (added/compressed/dropped). `packetUtils` detects

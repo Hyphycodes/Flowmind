@@ -1,8 +1,9 @@
 "use client";
 
 import { createElement, useState } from "react";
-import { Loader2, Mic, MicOff, Play, RotateCw, Users, X } from "lucide-react";
+import { Loader2, Mic, MicOff, Play, Plus, RotateCw, Trash2, Users, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
+import { TEAM_STRATEGIES, type TeamStrategy } from "@/lib/pipeline/schema";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
 import { cn } from "@/lib/ui/cn";
@@ -25,6 +26,9 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
   const runPipeline = usePipelineStore((s) => s.runPipeline);
   const rerunTeam = usePipelineStore((s) => s.rerunTeam);
   const runSoloAgent = usePipelineStore((s) => s.runSoloAgent);
+  const setTeamStrategy = usePipelineStore((s) => s.setTeamStrategy);
+  const addTeamAgent = usePipelineStore((s) => s.addTeamAgent);
+  const removeTeamAgent = usePipelineStore((s) => s.removeTeamAgent);
   const runStatus = usePipelineStore((s) => s.runStatus);
   const runningAgentId = usePipelineStore((s) => s.runningAgentId);
   const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
@@ -105,23 +109,44 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
 
       {node.team && node.team.agents.length > 0 && (
         <div className="mt-4">
-          <div className="mb-1.5 flex items-center justify-between">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
               <Users size={12} /> Crew Room
             </span>
-            <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] capitalize text-ink-dim">
-              {node.team.strategy}
-            </span>
+            <select
+              value={node.team.strategy}
+              onChange={(e) => setTeamStrategy(node.id, e.target.value as TeamStrategy)}
+              title="Coordination strategy — rebuilds the team's controller + internal wiring"
+              className="cursor-pointer rounded-md border border-line bg-white/[0.04] px-1.5 py-0.5 text-[10px] capitalize text-ink-dim outline-none transition hover:text-ink"
+            >
+              {TEAM_STRATEGIES.map((s) => (
+                <option key={s} value={s} className="bg-[#14141c] text-ink">
+                  {s}
+                </option>
+              ))}
+            </select>
           </div>
-          <div className="space-y-1">
+          {(() => {
+            const memberCount = node.team.agents.filter((a) => !a.isController).length;
+            const ctrlCount = node.team.agents.length - memberCount;
+            return (
+              <div className="mb-1.5 text-[10px] text-ink-faint">
+                {memberCount} member{memberCount === 1 ? "" : "s"}
+                {ctrlCount > 0 ? ` · ${ctrlCount} controller${ctrlCount === 1 ? "" : "s"}` : ""}
+              </div>
+            );
+          })()}
+          <div className="max-h-[300px] space-y-1 overflow-y-auto pr-0.5">
             {node.team.agents.map((a) => {
               const trace = agentTraceFor(a.id);
               const active = runningAgentId === a.id;
+              const isCtrl = !!a.isController;
               return (
                 <div
                   key={a.id}
                   className={cn(
-                    "rounded-lg border border-line bg-white/[0.02] px-2.5 py-1.5",
+                    "rounded-lg border px-2.5 py-1.5",
+                    isCtrl ? "border-violet/30 bg-violet/[0.05]" : "border-line bg-white/[0.02]",
                     a.muted && "opacity-45",
                   )}
                 >
@@ -129,39 +154,55 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate text-[12px] text-ink">{a.name || a.role || a.id}</span>
-                        {a.id === node.team!.lead && (
+                        {isCtrl ? (
+                          <span className="rounded bg-violet/20 px-1 text-[9px] capitalize text-violet">
+                            {a.controllerKind ?? "controller"}
+                          </span>
+                        ) : a.id === node.team!.lead ? (
                           <span className="rounded bg-violet/15 px-1 text-[9px] text-violet">lead</span>
-                        )}
+                        ) : null}
                       </div>
                       {a.role && <div className="truncate text-[10px] text-ink-faint">{a.role}</div>}
                     </div>
                     <span className="shrink-0 font-mono text-[9.5px] text-ink-faint">
                       {trace ? `${trace.latencyMs}ms` : a.model.replace("claude-", "")}
                     </span>
-                    <button
-                      onClick={() => void runSoloAgent(node.id, a.id)}
-                      disabled={runStatus === "running" || a.muted}
-                      title="Run this agent with the latest team input"
-                      className="shrink-0 text-ink-faint transition hover:text-ink disabled:opacity-40"
-                    >
-                      {active ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-                    </button>
-                    <button
-                      onClick={() =>
-                        patchNode(node.id, {
-                          team: {
-                            ...node.team!,
-                            agents: node.team!.agents.map((x) =>
-                              x.id === a.id ? { ...x, muted: !x.muted } : x,
-                            ),
-                          },
-                        })
-                      }
-                      title={a.muted ? "Unmute agent" : "Mute agent"}
-                      className="shrink-0 text-ink-faint transition hover:text-ink"
-                    >
-                      {a.muted ? <MicOff size={13} /> : <Mic size={13} />}
-                    </button>
+                    {!isCtrl && (
+                      <>
+                        <button
+                          onClick={() => void runSoloAgent(node.id, a.id)}
+                          disabled={runStatus === "running" || a.muted}
+                          title="Run this agent with the latest team input"
+                          className="shrink-0 text-ink-faint transition hover:text-ink disabled:opacity-40"
+                        >
+                          {active ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+                        </button>
+                        <button
+                          onClick={() =>
+                            patchNode(node.id, {
+                              team: {
+                                ...node.team!,
+                                agents: node.team!.agents.map((x) =>
+                                  x.id === a.id ? { ...x, muted: !x.muted } : x,
+                                ),
+                              },
+                            })
+                          }
+                          title={a.muted ? "Unmute agent" : "Mute agent"}
+                          className="shrink-0 text-ink-faint transition hover:text-ink"
+                        >
+                          {a.muted ? <MicOff size={13} /> : <Mic size={13} />}
+                        </button>
+                        <button
+                          onClick={() => removeTeamAgent(node.id, a.id)}
+                          disabled={runStatus === "running"}
+                          title="Remove from team"
+                          className="shrink-0 text-ink-faint transition hover:text-red disabled:opacity-40"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
                   </div>
                   {trace ? (
                     <div className="mt-1.5 space-y-1 border-t border-line/50 pt-1.5">
@@ -179,7 +220,9 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
                       )}
                     </div>
                   ) : (
-                    <p className="mt-1 text-[10px] text-ink-faint">Sample/static crew member until this team runs.</p>
+                    <p className="mt-1 text-[10px] text-ink-faint">
+                      {isCtrl ? "Coordinates the crew when the team runs." : "Sample/static crew member until this team runs."}
+                    </p>
                   )}
                   <ModelPicker
                     node={node}
@@ -200,6 +243,14 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
               );
             })}
           </div>
+          <button
+            type="button"
+            onClick={() => addTeamAgent(node.id)}
+            disabled={runStatus === "running"}
+            className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-1.5 text-[11px] text-ink-faint transition hover:border-line-strong hover:text-ink disabled:opacity-40"
+          >
+            <Plus size={12} /> Add agent
+          </button>
           {latestTeamTrace && (
             <div className="mt-2 rounded-lg border border-line bg-black/20 p-2.5">
               <div className="flex items-center justify-between text-[10px] text-ink-faint">

@@ -12,6 +12,7 @@ import {
   type TeamStrategy,
 } from "./schema";
 import { repairPipeline } from "./validate";
+import { coordinateTeamNode, type TeamNodeLike } from "./teamCoordinator";
 import type { EffortLevel } from "./effort";
 
 /* ── Effort dial ──────────────────────────────────────────────────────────
@@ -152,8 +153,9 @@ function pickComponent(key: string): ComponentType {
   return "dataTable";
 }
 
-/** Flatten a team node's members (one level of nested sub-teams collapses into the
- *  crew, since a canonical team holds a flat list of agents) and wire internal edges. */
+/** Flatten a team node's members into a flat crew (one level of nested sub-teams
+ *  collapses in, since a canonical team holds a flat list of agents). The Team
+ *  Coordinator (`coordinateTeamNode`) then adds controllers, lead, and wiring. */
 function buildTeam(node: GenNode) {
   const strategy: TeamStrategy = (TEAM_STRATEGIES as readonly string[]).includes(node.strategy as string)
     ? (node.strategy as TeamStrategy)
@@ -191,17 +193,7 @@ function buildTeam(node: GenNode) {
     });
   }
 
-  // lead = a member that reads like the synthesizer/judge, else the first
-  const leadIdx = agents.findIndex((a) => /lead|judge|chair|synth|final|decide|aggregat|referee/i.test(`${a.role} ${a.name}`));
-  const lead = agents[leadIdx >= 0 ? leadIdx : 0];
-  lead.isLead = true;
-
-  const internalEdges =
-    strategy === "sequential"
-      ? agents.slice(1).map((a, i) => ({ source: agents[i].id, target: a.id }))
-      : agents.filter((a) => a.id !== lead.id).map((a) => ({ source: lead.id, target: a.id }));
-
-  return { strategy, lead: lead.id, agents, internalEdges };
+  return { strategy, agents };
 }
 
 /** Map the Architect's JSON into a loose candidate Pipeline; `repairPipeline`
@@ -257,6 +249,12 @@ export function architectToCandidate(obj: GenObject) {
     return out;
   });
 
+  // Prompt 03 — Team Coordinator: give each team its controller(s), internal
+  // wiring, lead, and derived identity (deterministic, so large crews stay instant).
+  const coordinatedNodes = nodes.map((n) =>
+    n.team ? (coordinateTeamNode(n as unknown as TeamNodeLike) as unknown as typeof n) : n,
+  );
+
   const mockInputs = (inputNode?.fields ?? []).map((f) => ({
     key: f.name,
     label: f.label || f.name,
@@ -273,7 +271,7 @@ export function architectToCandidate(obj: GenObject) {
   // UI bindings from the output node's `display` (or derived from what flows into it),
   // so the Preview surface has something meaningful the moment the pipeline renders.
   const producedKeys = new Set<string>();
-  for (const n of nodes) for (const k of (n.outputs as string[]) ?? []) producedKeys.add(k);
+  for (const n of coordinatedNodes) for (const k of (n.outputs as string[]) ?? []) producedKeys.add(k);
 
   let display = outputNode?.display ?? [];
   if (!display.length) {
@@ -297,7 +295,7 @@ export function architectToCandidate(obj: GenObject) {
   return {
     name: obj.name,
     description: obj.summary,
-    nodes,
+    nodes: coordinatedNodes,
     edges,
     mockInputs,
     outputTables: [], // repairPipeline derives one per output key
@@ -313,7 +311,7 @@ const EFFORT_GUIDE: Record<EffortLevel, string> = {
   balanced:
     "EFFORT = balanced (default). Use a few focused nodes plus one or two small teams where coordination genuinely helps. Aim for ~6–12 nodes total.",
   deep:
-    "EFFORT = deep. Use richer structure: more agents, more teams, possibly one nested team. Use parallel and debate/vote strategies where they add real quality. Cap the whole pipeline at ~30 agents total — never exceed this. Every node must justify itself.",
+    "EFFORT = deep. Go big when the work earns it: a rich org of teams and agents, up to ~50 agents total across all teams. Use large parallel / vote / debate teams (a team can hold 8–15 members when the work genuinely fans out), routers that dispatch to specialists, and nested teams. Prefer several focused teams over one giant one. Every node must still justify itself — no filler.",
 };
 
 /** Catalog of data-fetch / lookup tools the Architect can wire as `tool` nodes.

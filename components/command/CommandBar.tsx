@@ -148,31 +148,6 @@ export function CommandBar() {
       ) : null}
 
       <div className="pointer-events-auto w-full max-w-2xl">
-        <div className="mb-2 flex items-center justify-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-faint">Effort</span>
-          <div className="flex items-center gap-0.5 rounded-full p-0.5 glass-strong">
-            {EFFORT_LEVELS.map((lvl) => {
-              const active = effort === lvl;
-              return (
-                <button
-                  key={lvl}
-                  type="button"
-                  onClick={() => setEffort(lvl)}
-                  disabled={generating}
-                  title={EFFORT_HINTS[lvl]}
-                  aria-pressed={active}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition disabled:opacity-50 ${
-                    active
-                      ? "bg-violet text-white shadow-[0_0_14px_rgba(139,92,246,0.45)]"
-                      : "text-ink-dim hover:text-ink"
-                  }`}
-                >
-                  {EFFORT_LABELS[lvl]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -187,6 +162,20 @@ export function CommandBar() {
             placeholder="Describe the AI system you want to build…"
             className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
+          <select
+            value={effort}
+            onChange={(e) => setEffort(e.target.value as typeof effort)}
+            disabled={generating}
+            title={`Effort · ${EFFORT_HINTS[effort]}`}
+            aria-label="Generation effort"
+            className="h-8 shrink-0 cursor-pointer rounded-lg border border-line bg-white/[0.03] px-2 text-[11px] font-medium text-ink-dim outline-none transition hover:text-ink disabled:opacity-50"
+          >
+            {EFFORT_LEVELS.map((lvl) => (
+              <option key={lvl} value={lvl} className="bg-[#14141c] text-ink">
+                {EFFORT_LABELS[lvl]}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             disabled={generating || !text.trim()}

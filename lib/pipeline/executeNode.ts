@@ -436,6 +436,7 @@ async function executeAgent(
 
 function pickChair(agents: AgentConfig[], node: PipelineNode): AgentConfig | null {
   return (
+    agents.find((a) => a.isController) ??
     agents.find((a) => a.id === node.team?.lead) ??
     agents.find((a) => a.isLead) ??
     agents[agents.length - 1] ??
@@ -492,7 +493,9 @@ async function synthesizeTeam(
   fallbackWarnings: string[],
 ) {
   const expected = node.outputs.length ? node.outputs : [node.id];
-  const chair = pickChair(agentTraces.map((t) => ({
+  // The team's controller (Aggregator / Judge / Router) is the chair: its prompt steers the merge.
+  const controller = (node.team?.agents ?? []).find((a) => a.isController) ?? null;
+  const chair = controller ?? pickChair(agentTraces.map((t) => ({
     id: t.agentId,
     name: t.agentName,
     role: t.role,
@@ -538,8 +541,9 @@ async function synthesizeTeam(
   const result = await generateObject({
     model: getModelClient(synthesisModel),
     schema: teamSynthesisSchema,
-    system:
-      "You are the chair of a Flowmind Team Node. Merge internal agent work into a clean team output, output tables, and a concise decision record.",
+    system: controller
+      ? `You are the ${controller.controllerKind ?? "aggregator"} controller ("${controller.name || "Controller"}") of the Flowmind Team Node "${node.title}". Follow your instructions to coordinate the members and produce the team's result.\n\nYour instructions: ${controller.prompt}\n\nReturn a clean team output, the output tables, and a concise decision record.`
+      : "You are the chair of a Flowmind Team Node. Merge internal agent work into a clean team output, output tables, and a concise decision record.",
     prompt: [
       `Pipeline: ${ctx.pipelineName}`,
       `Team: ${node.title} (${node.team?.strategy ?? "single"})`,
@@ -623,6 +627,11 @@ async function createTeamPacket(
 async function executeTeamNode(node: PipelineNode, ctx: ExecuteContext): Promise<ExecuteResult> {
   const started = new Date();
   const activeAgents = (node.team?.agents ?? []).filter((a) => !a.muted);
+  // Controllers (Router/Judge/Aggregator) don't run as workers — they coordinate the
+  // members and drive synthesis. Members are the non-controller agents.
+  const members = activeAgents.some((a) => !a.isController)
+    ? activeAgents.filter((a) => !a.isController)
+    : activeAgents;
   const teamTraceBase = {
     id: newId("team_run"),
     runId: ctx.runId,
@@ -660,7 +669,7 @@ async function executeTeamNode(node: PipelineNode, ctx: ExecuteContext): Promise
     return { summary: teamTrace.outputSummary, tables: [], packet, agentTraces: [], teamTrace };
   }
 
-  const { traces, warnings: strategyWarnings } = await runTeamAgents(node, activeAgents, ctx);
+  const { traces, warnings: strategyWarnings } = await runTeamAgents(node, members, ctx);
   const synthesis = await synthesizeTeam(node, ctx, traces, strategyWarnings);
   const costUsd =
     traces.reduce((sum, trace) => sum + (trace.costUsd ?? 0), 0) +

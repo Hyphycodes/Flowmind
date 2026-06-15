@@ -53,6 +53,11 @@ export const TEAM_STRATEGIES = [
 ] as const;
 export type TeamStrategy = (typeof TEAM_STRATEGIES)[number];
 
+/** Visible controller nodes the Team Coordinator builds for a strategy
+ *  (router selects a member, judge resolves a debate, aggregator merges). */
+export const CONTROLLER_KINDS = ["router", "judge", "aggregator"] as const;
+export type ControllerKind = (typeof CONTROLLER_KINDS)[number];
+
 /** How a run is executed. simulate = datasets/deterministic; live = real models+tools;
  *  hybrid = live models, dataset/source fallbacks for missing/expensive APIs. */
 export const EXECUTION_MODES = ["simulate", "live", "hybrid"] as const;
@@ -182,6 +187,11 @@ export const agentConfigSchema = z.object({
   /** crew-room runtime/metadata (all optional) */
   isLead: z.boolean().optional(),
   muted: z.boolean().optional(),
+  /** When set, this agent is the team's controller (a visible node the Team
+   *  Coordinator builds: router/judge/aggregator). Removed when the team dissolves.
+   *  Members are the non-controller agents and are never rewritten. */
+  isController: z.boolean().optional(),
+  controllerKind: z.enum(CONTROLLER_KINDS).optional(),
   status: z.enum(NODE_STATUS).optional(),
   summary: z.string().optional(),
   confidence: z.number().optional(),

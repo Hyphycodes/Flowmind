@@ -60,7 +60,7 @@ single node.
 | --- | --- | --- | --- |
 | **tight** | One clean chain. Favor a single strong agent. | ~3–6 | 0–1 |
 | **balanced** (default) | A few focused nodes + small teams. | ~6–12 | 1–2 |
-| **deep** | Richer structure — more agents, parallel + debate/vote where they add quality, possibly one nested team. Cap ~30 agents total. | richer | several |
+| **deep** | A rich org — large parallel/vote/debate teams, routers, nested teams. Up to ~50 agents total across all teams. | richer | several |
 
 Rule across all three: **never add a node that doesn't change the result.**
 
