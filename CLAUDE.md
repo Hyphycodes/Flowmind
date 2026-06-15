@@ -54,6 +54,18 @@ Mental model used in schemas + labels: **Source** (where data comes from) → **
 (what intelligence does) → **Surface** (how it becomes usable). All upgrade fields are
 additive + optional so existing pipelines stay valid.
 
+- **Architect (Prompt 01).** Turns a plain-language description into a complete pipeline
+  (nodes, teams, wiring) from the bottom command bar. The engine is `lib/pipeline/architect.ts`
+  (`generateArchitectPipeline(description, effort)`): an effort-sized system prompt + the tool
+  catalog → real Claude `generateObject` → a spec→canonical mapping (`architectToCandidate`) →
+  `repairPipeline`. The **effort dial** (`tight|balanced|deep`) is a parameter, not a separate
+  prompt; levels/labels live in the dependency-free `lib/pipeline/effort.ts` so the client can
+  import them (never import `architect.ts` — it pulls the AI SDK — into client code). The dial
+  lives in `components/command/CommandBar.tsx`; `store.generate(description, effort?)` + `effort`
+  state thread it through; `app/api/generate-pipeline` reads `effort` and falls back to a template
+  when `ANTHROPIC_API_KEY` is missing or generation fails. Teams generate as `agent` nodes carrying
+  a `team` (nested sub-teams flatten into the crew). Keep Preview rendering deterministic — bindings
+  are derived from the output node's `display`, not asked of the model. Docs: `docs/ARCHITECT.md`.
 - **Team Nodes / Crew Rooms.** A `PipelineNode.team` (`lib/pipeline/schema.ts`) holds a
   `strategy` (single/sequential/parallel/debate/vote/router/council) + `agents[]` + a
   `lead`. The canvas shows departments; selecting a team node opens the **Crew Room**

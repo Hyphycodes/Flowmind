@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { EXPORT_MODES } from "@/lib/export/schema";
+import { EFFORT_LEVELS, EFFORT_HINTS, EFFORT_LABELS } from "@/lib/pipeline/effort";
 
 const CHIPS = [
   "Jarvis-style recommendation engine",
@@ -30,6 +31,8 @@ const REMIX_INTENTS: [RegExp, string][] = [
 export function CommandBar() {
   const generate = usePipelineStore((s) => s.generate);
   const generating = usePipelineStore((s) => s.generating);
+  const effort = usePipelineStore((s) => s.effort);
+  const setEffort = usePipelineStore((s) => s.setEffort);
   const notice = usePipelineStore((s) => s.notice);
   const setNotice = usePipelineStore((s) => s.setNotice);
   const pipeline = usePipelineStore((s) => s.pipeline);
@@ -145,6 +148,31 @@ export function CommandBar() {
       ) : null}
 
       <div className="pointer-events-auto w-full max-w-2xl">
+        <div className="mb-2 flex items-center justify-center gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-faint">Effort</span>
+          <div className="flex items-center gap-0.5 rounded-full p-0.5 glass-strong">
+            {EFFORT_LEVELS.map((lvl) => {
+              const active = effort === lvl;
+              return (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => setEffort(lvl)}
+                  disabled={generating}
+                  title={EFFORT_HINTS[lvl]}
+                  aria-pressed={active}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition disabled:opacity-50 ${
+                    active
+                      ? "bg-violet text-white shadow-[0_0_14px_rgba(139,92,246,0.45)]"
+                      : "text-ink-dim hover:text-ink"
+                  }`}
+                >
+                  {EFFORT_LABELS[lvl]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <form
           onSubmit={(e) => {
             e.preventDefault();

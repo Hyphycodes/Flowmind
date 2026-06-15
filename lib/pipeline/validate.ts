@@ -62,6 +62,10 @@ export function repairPipeline(
       inputs: Array.isArray(n?.inputs) ? n.inputs.map(String) : [],
       outputs: Array.isArray(n?.outputs) ? n.outputs.map(String) : [],
       status: "idle" as const,
+      // optional, additive fields preserved so generated grouping/config survives
+      layer: n?.layer,
+      source: n?.source,
+      evalDimensions: Array.isArray(n?.evalDimensions) ? n.evalDimensions.map(String) : undefined,
       team: n?.team,
     };
   });

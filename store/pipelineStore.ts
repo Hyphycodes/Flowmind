@@ -37,6 +37,7 @@ import {
   upsertPipeline,
 } from "@/lib/supabase/queries";
 import type { Dataset } from "@/lib/datasets/schema";
+import type { EffortLevel } from "@/lib/pipeline/effort";
 import { newId } from "@/lib/pipeline/validate";
 import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
 import { applyRepair, type RepairAction } from "@/lib/datasets/repair";
@@ -132,6 +133,8 @@ interface PipelineState {
 
   saveStatus: SaveStatus;
   generating: boolean;
+  /** Architect effort dial — sizes how big a pipeline a description generates. */
+  effort: EffortLevel;
   notice: string | null;
 
   setActivePipeline: (p: Pipeline, run?: RunTrace | null) => void;
@@ -147,6 +150,7 @@ interface PipelineState {
   setConnectToUI: (v: boolean) => void;
   setActiveTable: (id: string | null) => void;
   setNotice: (n: string | null) => void;
+  setEffort: (e: EffortLevel) => void;
   selectPacket: (id: string | null) => void;
 
   /** Input Studio / Source Layer */
@@ -187,7 +191,7 @@ interface PipelineState {
   closeUpgrade: () => void;
   runExport: (modes: ExportMode[]) => Promise<void>;
 
-  generate: (description: string) => Promise<void>;
+  generate: (description: string, effort?: EffortLevel) => Promise<void>;
   runPipeline: (options?: RunOptions) => Promise<void>;
   rerunTeam: (nodeId: string) => Promise<void>;
   runSoloAgent: (nodeId: string, agentId: string) => Promise<void>;
@@ -277,6 +281,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     upgradeGate: null,
     saveStatus: "idle",
     generating: false,
+    effort: "balanced",
     notice: null,
 
     setActivePipeline: (p, run) => {
@@ -350,6 +355,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     setConnectToUI: (connectToUI) => set({ connectToUI }),
     setActiveTable: (activeTableId) => set({ activeTableId }),
     setNotice: (notice) => set({ notice }),
+    setEffort: (effort) => set({ effort }),
     selectPacket: (selectedPacketId) => set({ selectedPacketId, panelTab: "packets", panelOpen: true }),
 
     /* ── Input Studio / Source Layer ──────────────────────────────────── */
@@ -717,14 +723,15 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       }
     },
 
-    generate: async (description) => {
+    generate: async (description, effort) => {
       if (!description.trim() || get().generating) return;
+      const level = effort ?? get().effort;
       set({ generating: true, notice: null });
       try {
         const res = await fetch("/api/generate-pipeline", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description }),
+          body: JSON.stringify({ description, effort: level }),
         });
         const j = await res.json().catch(() => ({}));
         if (!res.ok || !j.pipeline) {
