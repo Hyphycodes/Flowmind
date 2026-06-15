@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Loader2, Sparkles } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { pipelineSchema } from "@/lib/pipeline/schema";
@@ -17,6 +18,7 @@ import {
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { PipelineCanvas } from "@/components/canvas/PipelineCanvas";
+import { NodePopover } from "@/components/canvas/NodePopover";
 import { CommandBar } from "@/components/command/CommandBar";
 import { NodeInspector } from "@/components/panels/NodeInspector";
 import { OutputPanel } from "@/components/panels/OutputPanel";
@@ -131,6 +133,7 @@ export function Builder() {
         <div className="relative flex min-h-0 flex-1">
           <div className="relative min-w-0 flex-1">
             {loading ? <CanvasLoading /> : empty ? <EmptyCanvas /> : <PipelineCanvas />}
+            <NodePopover />
             <NodeInspector />
             <CommandBar />
             <InputStudioPanel />
@@ -192,18 +195,18 @@ function EmptyCanvas() {
         </div>
 
         <div className="mt-5 flex items-center justify-center gap-2 text-[12px]">
-          <a
+          <Link
             href="/?template=tpl-jarvis"
             className="flex items-center gap-1.5 rounded-lg bg-violet px-3 py-1.5 font-medium text-white transition hover:bg-violet/90"
           >
             <Sparkles size={13} /> Open the Jarvis demo
-          </a>
-          <a
+          </Link>
+          <Link
             href="/templates"
             className="rounded-lg border border-line-strong bg-white/[0.04] px-3 py-1.5 text-ink transition hover:bg-white/[0.1]"
           >
             Browse templates
-          </a>
+          </Link>
         </div>
         <p className="mt-4 text-[11px] text-ink-faint">…or describe your own in the command bar below.</p>
       </div>

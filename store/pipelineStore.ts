@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   pipelineSchema,
+  type AgentConfig,
   type AgentRunTrace,
   type ExecutionMode,
   type FieldMapping,
@@ -40,6 +41,7 @@ import {
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
 import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
+import { canEnterTeam } from "@/lib/pipeline/teamView";
 import { newId } from "@/lib/pipeline/validate";
 import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
 import { applyRepair, type RepairAction } from "@/lib/datasets/repair";
@@ -78,6 +80,10 @@ type Pos = { x: number; y: number };
 interface PipelineState {
   pipeline: Pipeline | null;
   selectedNodeId: string | null;
+  /** advanced settings panel (NodeInspector) — opened from the popover, not single-click */
+  inspectorOpen: boolean;
+  /** view stack of entered team ids — zoom into a team's internal canvas (max depth 3) */
+  teamPath: string[];
 
   runStatus: RunStatus;
   runningNodeId: string | null;
@@ -141,6 +147,16 @@ interface PipelineState {
 
   setActivePipeline: (p: Pipeline, run?: RunTrace | null) => void;
   selectNode: (id: string | null) => void;
+  openInspector: (id?: string) => void;
+  closeInspector: () => void;
+  /** Team zoom (view stack) */
+  enterTeam: (nodeId: string) => void;
+  exitTeam: () => void;
+  setTeamPath: (path: string[]) => void;
+  /** Drag a node onto another to form / grow a team (undoable). */
+  mergeNodeIntoTeam: (draggedId: string, targetId: string) => void;
+  setAgentPrompt: (teamId: string, agentId: string, prompt: string) => void;
+  undo: () => void;
   patchNode: (id: string, patch: Partial<PipelineNode>) => void;
   setNodePrompt: (id: string, prompt: string) => void;
   /** Team Coordinator: change strategy / add / remove members → re-coordinate
@@ -242,9 +258,19 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     if (save) scheduleSave();
   };
 
+  // Single-level-ish undo for structural edits (e.g. drag-to-merge). Pipeline objects
+  // are always replaced (never mutated in place), so a reference is a valid snapshot.
+  let history: Pipeline[] = [];
+  const pushHistory = (p: Pipeline) => {
+    history.push(p);
+    if (history.length > 12) history = history.slice(-12);
+  };
+
   return {
     pipeline: null,
     selectedNodeId: null,
+    inspectorOpen: false,
+    teamPath: [],
     runStatus: "idle",
     runningNodeId: null,
     runStartedAt: null,
@@ -339,7 +365,102 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       get().refreshProduct();
     },
 
-    selectNode: (id) => set({ selectedNodeId: id }),
+    selectNode: (id) => set({ selectedNodeId: id, inspectorOpen: false }),
+
+    openInspector: (id) => set((s) => ({ selectedNodeId: id ?? s.selectedNodeId, inspectorOpen: true })),
+    closeInspector: () => set({ inspectorOpen: false }),
+
+    enterTeam: (nodeId) =>
+      set((s) => {
+        if (!s.pipeline || s.teamPath.length >= 3) return {};
+        if (!canEnterTeam(s.pipeline, s.teamPath, nodeId)) return {};
+        return { teamPath: [...s.teamPath, nodeId], selectedNodeId: null, inspectorOpen: false };
+      }),
+    exitTeam: () =>
+      set((s) => (s.teamPath.length === 0 ? {} : { teamPath: s.teamPath.slice(0, -1), selectedNodeId: null, inspectorOpen: false })),
+    setTeamPath: (path) => set({ teamPath: path, selectedNodeId: null, inspectorOpen: false }),
+
+    setAgentPrompt: (teamId, agentId, prompt) =>
+      mutate((p) => ({
+        ...p,
+        nodes: p.nodes.map((n) =>
+          n.id === teamId && n.team
+            ? { ...n, team: { ...n.team, agents: n.team.agents.map((a) => (a.id === agentId ? { ...a, prompt } : a)) } }
+            : n,
+        ),
+      })),
+
+    undo: () => {
+      const prev = history.pop();
+      if (!prev) return;
+      set({ pipeline: prev, selectedNodeId: null, inspectorOpen: false, notice: "Reverted the last change." });
+      scheduleSave();
+    },
+
+    mergeNodeIntoTeam: (draggedId, targetId) => {
+      const p = get().pipeline;
+      if (!p || draggedId === targetId) return;
+      const dragged = p.nodes.find((n) => n.id === draggedId);
+      const target = p.nodes.find((n) => n.id === targetId);
+      if (!dragged || !target) return;
+      if (["input", "output"].includes(dragged.type) || ["input", "output"].includes(target.type)) {
+        set({ notice: "Input and output nodes can't be merged into a team." });
+        return;
+      }
+      pushHistory(p);
+
+      const agentFrom = (n: PipelineNode): AgentConfig => ({
+        id: n.id,
+        name: n.title,
+        role: n.role ?? "",
+        prompt: n.prompt ?? "",
+        model: n.model,
+        modelSelection: n.modelSelection,
+        toolAttachments: n.toolAttachments ?? [],
+        muted: false,
+      });
+
+      let merged: PipelineNode;
+      if (target.team) {
+        const members = target.team.agents.filter((a) => !a.isController);
+        merged = { ...target, team: { ...target.team, agents: [...members, agentFrom(dragged)] } };
+      } else {
+        const t = agentFrom(target);
+        const d = agentFrom(dragged);
+        merged = {
+          ...target,
+          team: { strategy: "sequential", agents: [t, d], lead: undefined, internalEdges: [{ source: t.id, target: d.id }], toolAttachments: [] },
+        };
+      }
+      merged = coordinateTeamNode(merged);
+
+      // Rewire any edges touching the dragged node onto the team; drop self-loops + dupes.
+      const seen = new Set<string>();
+      const edges = p.edges
+        .map((e) => ({
+          ...e,
+          source: e.source === draggedId ? targetId : e.source,
+          target: e.target === draggedId ? targetId : e.target,
+        }))
+        .filter((e) => e.source !== e.target)
+        .filter((e) => {
+          const k = `${e.source}>${e.target}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+      const nodes = p.nodes.filter((n) => n.id !== draggedId).map((n) => (n.id === targetId ? merged : n));
+
+      set({
+        pipeline: { ...p, nodes, edges, updatedAt: new Date().toISOString() },
+        selectedNodeId: targetId,
+        inspectorOpen: false,
+        notice: target.team
+          ? `Added “${dragged.title}” to ${target.title}.`
+          : `Formed team “${target.title}”. Press ⌘Z to undo.`,
+      });
+      scheduleSave();
+    },
 
     patchNode: (id, patch) =>
       mutate((p) => ({ ...p, nodes: p.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)) })),
@@ -390,7 +511,22 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       })),
 
     setNodePosition: (id, position) =>
-      mutate((p) => ({ ...p, nodes: p.nodes.map((n) => (n.id === id ? { ...n, position } : n)) })),
+      mutate((p) => {
+        // Top level → move the pipeline node. Inside a team → persist the agent's
+        // position within the entered team so drags stick on the zoomed-in canvas.
+        const path = get().teamPath;
+        if (path.length === 0) {
+          return { ...p, nodes: p.nodes.map((n) => (n.id === id ? { ...n, position } : n)) };
+        }
+        return {
+          ...p,
+          nodes: p.nodes.map((n) =>
+            n.id === path[0] && n.team
+              ? { ...n, team: { ...n.team, agents: n.team.agents.map((a) => (a.id === id ? { ...a, position } : a)) } }
+              : n,
+          ),
+        };
+      }),
 
     setMockInput: (key, value) =>
       mutate((p) => ({

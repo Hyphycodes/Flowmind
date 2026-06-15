@@ -86,6 +86,17 @@ additive + optional so existing pipelines stay valid.
   (`setTeamStrategy`/`addTeamAgent`/`removeTeamAgent`/`coordinateTeam`) re-runs it on Crew Room
   edits. The team's declared `inputs`/`outputs` stay the stable downstream contract.
   Docs: `docs/TEAM_COORDINATOR.md`.
+- **Canvas interaction.** Single-click a node → a focused **popover** (`components/canvas/
+  NodePopover.tsx`): regular nodes/agents show *What came in · Prompt (editable) · What went
+  out* (key names before a run, real `steps`/`agentRunTraces` values after); team nodes show a
+  folder summary + **Open team**. The big `NodeInspector` is now **advanced settings only**
+  (models/tools/source/IO) and opens via the popover's "Edit details" (`inspectorOpen` state),
+  NOT on single click. Double-click a team → zoom into its internal canvas: a `teamPath` view
+  stack (max depth 3) resolved by `lib/pipeline/teamView.ts` (`resolveTeamView` + ephemeral
+  `layoutAgents`), with a breadcrumb; Esc/crumb returns. Drag one node onto another →
+  `mergeNodeIntoTeam` forms/grows a team (rewires edges, re-runs the Coordinator, **undoable**
+  via `undo()` / ⌘Z); detection uses React Flow `getIntersectingNodes`. Members are never
+  rewritten — this layer is structure + presentation only.
 - **Handoff Packets.** Slim compressed output passed between teams
   (`lib/packets/*`, `handoffPacketSchema`): summary, key fields, confidence, assumptions,
   missing data, warnings, field changes (added/compressed/dropped). `packetUtils` detects

@@ -1,47 +1,36 @@
 "use client";
 
-import { createElement, useState } from "react";
-import { Loader2, Mic, MicOff, Play, Plus, RotateCw, Trash2, Users, X } from "lucide-react";
+import { createElement } from "react";
+import { Loader2, RotateCw, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { TEAM_STRATEGIES, type TeamStrategy } from "@/lib/pipeline/schema";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
-import { cn } from "@/lib/ui/cn";
 import { SourceLayer } from "./SourceLayer";
 import { ModelPicker } from "@/components/models/ModelPicker";
 import { ToolAttachPanel } from "@/components/tools/ToolAttachPanel";
 
+/** Advanced settings for a node — opened from the popover's "Edit details" button,
+ *  not on single click. Prompt editing + team internals live elsewhere (popover +
+ *  the zoomed-in team canvas); this panel is models, tools, source, and I/O. */
 export function NodeInspector() {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const selectedId = usePipelineStore((s) => s.selectedNodeId);
+  const inspectorOpen = usePipelineStore((s) => s.inspectorOpen);
   const node = pipeline?.nodes.find((n) => n.id === selectedId) ?? null;
 
-  if (!node) return null;
+  if (!node || !inspectorOpen) return null;
   return <NodeInspectorPanel key={node.id} node={node} />;
 }
 
 function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof usePipelineStore.getState>["pipeline"]>["nodes"][number] }) {
-  const selectNode = usePipelineStore((s) => s.selectNode);
-  const setNodePrompt = usePipelineStore((s) => s.setNodePrompt);
+  const closeInspector = usePipelineStore((s) => s.closeInspector);
   const runPipeline = usePipelineStore((s) => s.runPipeline);
   const rerunTeam = usePipelineStore((s) => s.rerunTeam);
-  const runSoloAgent = usePipelineStore((s) => s.runSoloAgent);
-  const setTeamStrategy = usePipelineStore((s) => s.setTeamStrategy);
-  const addTeamAgent = usePipelineStore((s) => s.addTeamAgent);
-  const removeTeamAgent = usePipelineStore((s) => s.removeTeamAgent);
   const runStatus = usePipelineStore((s) => s.runStatus);
-  const runningAgentId = usePipelineStore((s) => s.runningAgentId);
-  const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
-  const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
   const patchNode = usePipelineStore((s) => s.patchNode);
-
-  const [prompt, setPrompt] = useState(node.prompt ?? "");
 
   const accent = hexFor({ color: node.color, type: node.type });
   const icon = iconForNode(node);
-  const latestTeamTrace = [...teamRunTraces].reverse().find((t) => t.teamNodeId === node.id);
-  const agentTraceFor = (agentId: string) =>
-    [...agentRunTraces].reverse().find((t) => t.teamNodeId === node.id && t.agentId === agentId);
 
   return (
     <div className="absolute right-5 top-5 z-30 w-[320px] rounded-2xl p-4 glass-strong fm-fade-up shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
@@ -60,25 +49,13 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
           </div>
         </div>
         <button
-          onClick={() => selectNode(null)}
+          onClick={() => closeInspector()}
           className="text-ink-faint transition hover:text-ink"
-          aria-label="Close inspector"
+          aria-label="Close settings"
         >
           <X size={16} />
         </button>
       </div>
-
-      <label className="mt-4 block text-[10px] font-medium uppercase tracking-wide text-ink-faint">
-        Prompt
-      </label>
-      <textarea
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        onBlur={() => prompt !== node.prompt && setNodePrompt(node.id, prompt)}
-        rows={5}
-        placeholder="What should this agent do?"
-        className="mt-1.5 w-full resize-none rounded-lg border border-line bg-black/30 p-2.5 text-[12px] leading-relaxed text-ink outline-none focus:border-line-strong"
-      />
 
       <div className="mt-3 flex items-center justify-between text-[11px]">
         <span className="text-ink-faint">Model</span>
@@ -91,10 +68,7 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
         onChange={(modelSelection, model) => patchNode(node.id, { modelSelection, model })}
       />
 
-      <ToolAttachPanel
-        node={node}
-        onChange={(toolAttachments) => patchNode(node.id, { toolAttachments })}
-      />
+      <ToolAttachPanel node={node} onChange={(toolAttachments) => patchNode(node.id, { toolAttachments })} />
 
       {(node.inputs.length > 0 || node.outputs.length > 0) && (
         <div className="mt-3 space-y-2">
@@ -105,171 +79,6 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
 
       {(node.source || node.layer === "source" || node.type === "input" || node.type === "tool") && (
         <SourceLayer node={node} />
-      )}
-
-      {node.team && node.team.agents.length > 0 && (
-        <div className="mt-4">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
-              <Users size={12} /> Crew Room
-            </span>
-            <select
-              value={node.team.strategy}
-              onChange={(e) => setTeamStrategy(node.id, e.target.value as TeamStrategy)}
-              title="Coordination strategy — rebuilds the team's controller + internal wiring"
-              className="cursor-pointer rounded-md border border-line bg-white/[0.04] px-1.5 py-0.5 text-[10px] capitalize text-ink-dim outline-none transition hover:text-ink"
-            >
-              {TEAM_STRATEGIES.map((s) => (
-                <option key={s} value={s} className="bg-[#14141c] text-ink">
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          {(() => {
-            const memberCount = node.team.agents.filter((a) => !a.isController).length;
-            const ctrlCount = node.team.agents.length - memberCount;
-            return (
-              <div className="mb-1.5 text-[10px] text-ink-faint">
-                {memberCount} member{memberCount === 1 ? "" : "s"}
-                {ctrlCount > 0 ? ` · ${ctrlCount} controller${ctrlCount === 1 ? "" : "s"}` : ""}
-              </div>
-            );
-          })()}
-          <div className="max-h-[300px] space-y-1 overflow-y-auto pr-0.5">
-            {node.team.agents.map((a) => {
-              const trace = agentTraceFor(a.id);
-              const active = runningAgentId === a.id;
-              const isCtrl = !!a.isController;
-              return (
-                <div
-                  key={a.id}
-                  className={cn(
-                    "rounded-lg border px-2.5 py-1.5",
-                    isCtrl ? "border-violet/30 bg-violet/[0.05]" : "border-line bg-white/[0.02]",
-                    a.muted && "opacity-45",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate text-[12px] text-ink">{a.name || a.role || a.id}</span>
-                        {isCtrl ? (
-                          <span className="rounded bg-violet/20 px-1 text-[9px] capitalize text-violet">
-                            {a.controllerKind ?? "controller"}
-                          </span>
-                        ) : a.id === node.team!.lead ? (
-                          <span className="rounded bg-violet/15 px-1 text-[9px] text-violet">lead</span>
-                        ) : null}
-                      </div>
-                      {a.role && <div className="truncate text-[10px] text-ink-faint">{a.role}</div>}
-                    </div>
-                    <span className="shrink-0 font-mono text-[9.5px] text-ink-faint">
-                      {trace ? `${trace.latencyMs}ms` : a.model.replace("claude-", "")}
-                    </span>
-                    {!isCtrl && (
-                      <>
-                        <button
-                          onClick={() => void runSoloAgent(node.id, a.id)}
-                          disabled={runStatus === "running" || a.muted}
-                          title="Run this agent with the latest team input"
-                          className="shrink-0 text-ink-faint transition hover:text-ink disabled:opacity-40"
-                        >
-                          {active ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-                        </button>
-                        <button
-                          onClick={() =>
-                            patchNode(node.id, {
-                              team: {
-                                ...node.team!,
-                                agents: node.team!.agents.map((x) =>
-                                  x.id === a.id ? { ...x, muted: !x.muted } : x,
-                                ),
-                              },
-                            })
-                          }
-                          title={a.muted ? "Unmute agent" : "Mute agent"}
-                          className="shrink-0 text-ink-faint transition hover:text-ink"
-                        >
-                          {a.muted ? <MicOff size={13} /> : <Mic size={13} />}
-                        </button>
-                        <button
-                          onClick={() => removeTeamAgent(node.id, a.id)}
-                          disabled={runStatus === "running"}
-                          title="Remove from team"
-                          className="shrink-0 text-ink-faint transition hover:text-red disabled:opacity-40"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {trace ? (
-                    <div className="mt-1.5 space-y-1 border-t border-line/50 pt-1.5">
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="capitalize text-ink-faint">{trace.status}</span>
-                        {typeof trace.confidence === "number" && (
-                          <span className="font-mono text-ink-faint">{Math.round(trace.confidence * 100)}%</span>
-                        )}
-                      </div>
-                      <p className="line-clamp-2 text-[10.5px] leading-relaxed text-ink-dim">
-                        {trace.outputSummary || "Agent completed."}
-                      </p>
-                      {trace.warnings.length > 0 && (
-                        <p className="text-[10px] leading-relaxed text-gold">{trace.warnings[0]}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="mt-1 text-[10px] text-ink-faint">
-                      {isCtrl ? "Coordinates the crew when the team runs." : "Sample/static crew member until this team runs."}
-                    </p>
-                  )}
-                  <ModelPicker
-                    node={node}
-                    agent={a}
-                    value={a.modelSelection}
-                    onChange={(modelSelection, model) =>
-                      patchNode(node.id, {
-                        team: {
-                          ...node.team!,
-                          agents: node.team!.agents.map((x) =>
-                            x.id === a.id ? { ...x, modelSelection, model } : x,
-                          ),
-                        },
-                      })
-                    }
-                  />
-                </div>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={() => addTeamAgent(node.id)}
-            disabled={runStatus === "running"}
-            className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line py-1.5 text-[11px] text-ink-faint transition hover:border-line-strong hover:text-ink disabled:opacity-40"
-          >
-            <Plus size={12} /> Add agent
-          </button>
-          {latestTeamTrace && (
-            <div className="mt-2 rounded-lg border border-line bg-black/20 p-2.5">
-              <div className="flex items-center justify-between text-[10px] text-ink-faint">
-                <span>{latestTeamTrace.status === "success" ? "Latest team trace" : "Team trace"}</span>
-                {typeof latestTeamTrace.confidence === "number" && (
-                  <span className="font-mono">{Math.round(latestTeamTrace.confidence * 100)}%</span>
-                )}
-              </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-ink-dim">
-                {latestTeamTrace.consultationSummary || latestTeamTrace.outputSummary}
-              </p>
-              {latestTeamTrace.mergeDecision && (
-                <p className="mt-1 text-[10.5px] leading-relaxed text-ink-faint">
-                  Merge: {latestTeamTrace.mergeDecision}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
       )}
 
       <button
@@ -286,17 +95,7 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
   );
 }
 
-function ChipRow({
-  label,
-  items,
-  accent,
-  dim,
-}: {
-  label: string;
-  items: string[];
-  accent: string;
-  dim?: boolean;
-}) {
+function ChipRow({ label, items, accent, dim }: { label: string; items: string[]; accent: string; dim?: boolean }) {
   if (items.length === 0) return null;
   return (
     <div className="flex items-start gap-2">
@@ -306,10 +105,7 @@ function ChipRow({
           <span
             key={i}
             className="rounded-md px-1.5 py-[2px] font-mono text-[10px]"
-            style={{
-              background: dim ? "#ffffff0d" : withAlpha(accent, 0.12),
-              color: dim ? "#a6a7ba" : accent,
-            }}
+            style={{ background: dim ? "#ffffff0d" : withAlpha(accent, 0.12), color: dim ? "#a6a7ba" : accent }}
           >
             {i}
           </span>

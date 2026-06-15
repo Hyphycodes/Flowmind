@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { createElement, memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Users } from "lucide-react";
 import type { PipelineNode } from "@/lib/pipeline/schema";
@@ -11,12 +11,15 @@ import { cn } from "@/lib/ui/cn";
 function AgentNodeImpl({ data, selected }: NodeProps) {
   const node = data as unknown as PipelineNode;
   const sourceBadge = (data as { sourceBadge?: { label: string; meta: string } }).sourceBadge;
+  const controllerKind = (data as { controllerKind?: string }).controllerKind;
+  const dropTarget = (data as { dropTarget?: boolean }).dropTarget;
   const accent = hexFor({ color: node.color, type: node.type });
-  const Icon = iconForNode(node);
+  const icon = iconForNode(node);
   const status = node.status;
 
-  const ring =
-    status === "running"
+  const ring = dropTarget
+    ? `0 0 0 2px ${accent}, 0 0 30px ${withAlpha(accent, 0.55)}`
+    : status === "running"
       ? `0 0 0 1.5px ${accent}, 0 0 26px ${withAlpha(accent, 0.45)}`
       : status === "success"
         ? `0 0 0 1px ${withAlpha(accent, 0.65)}, 0 0 20px ${withAlpha(accent, 0.18)}`
@@ -45,7 +48,7 @@ function AgentNodeImpl({ data, selected }: NodeProps) {
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
           style={{ background: withAlpha(accent, 0.16), color: accent, boxShadow: `inset 0 0 0 1px ${withAlpha(accent, 0.3)}` }}
         >
-          <Icon size={17} strokeWidth={1.9} />
+          {createElement(icon, { size: 17, strokeWidth: 1.9 })}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -57,6 +60,14 @@ function AgentNodeImpl({ data, selected }: NodeProps) {
                 title={`Team · ${node.team.strategy}`}
               >
                 <Users size={9} /> {node.team.agents.length || "team"}
+              </span>
+            ) : controllerKind ? (
+              <span
+                className="rounded-md px-1 py-[1px] text-[9px] font-medium capitalize"
+                style={{ background: withAlpha(accent, 0.16), color: accent }}
+                title={`Team controller · ${controllerKind}`}
+              >
+                {controllerKind}
               </span>
             ) : null}
           </div>

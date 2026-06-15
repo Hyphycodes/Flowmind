@@ -192,6 +192,8 @@ export const agentConfigSchema = z.object({
    *  Members are the non-controller agents and are never rewritten. */
   isController: z.boolean().optional(),
   controllerKind: z.enum(CONTROLLER_KINDS).optional(),
+  /** Optional persisted position for the agent inside the team's zoomed-in canvas. */
+  position: positionSchema.optional(),
   status: z.enum(NODE_STATUS).optional(),
   summary: z.string().optional(),
   confidence: z.number().optional(),
