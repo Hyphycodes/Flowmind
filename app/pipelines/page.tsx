@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Layers, Loader2, Plus, Trash2 } from "lucide-react";
+import { Layers, Loader2, Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
+import { PipelineCard } from "@/components/pipelines/PipelineCard";
 import { hasSupabase } from "@/lib/supabase/client";
 import { deletePipeline, listPipelines, type PipelineSummary } from "@/lib/supabase/queries";
-import { timeAgo } from "@/lib/ui/format";
 
 export default function PipelinesPage() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function PipelinesPage() {
     if (ok) setPipelines((s) => (s ? s.filter((p) => p.id !== id) : s));
   };
 
-  const open = (id: string) => router.push(`/?open=${id}`);
+  const open = (id: string) => router.push(`/editor?open=${id}`);
 
   return (
     <PageShell title="Pipelines" subtitle="Your pipelines">
@@ -32,7 +32,7 @@ export default function PipelinesPage() {
           {pipelines === null ? "" : `${pipelines.length} pipeline${pipelines.length === 1 ? "" : "s"}`}
         </p>
         <button
-          onClick={() => router.push("/?new=1")}
+          onClick={() => router.push("/editor?new=1")}
           className="flex items-center gap-1.5 rounded-lg bg-violet px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-violet/90"
         >
           <Plus size={15} /> New pipeline
@@ -49,7 +49,7 @@ export default function PipelinesPage() {
           <p className="text-sm text-ink-dim">No pipelines yet.</p>
           <p className="mt-1 text-xs text-ink-faint">Generate one from the editor to see it here.</p>
           <button
-            onClick={() => router.push("/?new=1")}
+            onClick={() => router.push("/editor?new=1")}
             className="mx-auto mt-4 flex items-center gap-1.5 rounded-lg bg-violet px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-violet/90"
           >
             <Plus size={15} /> New pipeline
@@ -58,39 +58,7 @@ export default function PipelinesPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {pipelines.map((p) => (
-            <div
-              key={p.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => open(p.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  open(p.id);
-                }
-              }}
-              className="group relative flex cursor-pointer flex-col rounded-2xl border border-line bg-white/[0.02] p-4 transition hover:border-line-strong hover:bg-white/[0.04]"
-            >
-              <button
-                onClick={(e) => remove(e, p.id, p.name)}
-                aria-label="Delete pipeline"
-                className="absolute right-3 top-3 text-ink-faint opacity-0 transition hover:text-red focus:opacity-100 group-hover:opacity-100"
-              >
-                <Trash2 size={15} />
-              </button>
-
-              <h3 className="truncate pr-6 text-[15px] font-medium text-ink">{p.name}</h3>
-              <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-ink-dim">
-                {p.description || "No description"}
-              </p>
-              <div className="mt-3 flex items-center gap-x-2 border-t border-line/60 pt-2.5 text-[11px] text-ink-faint">
-                <span>
-                  {p.nodeCount} node{p.nodeCount === 1 ? "" : "s"}
-                </span>
-                <span>·</span>
-                <span>{timeAgo(p.updatedAt)}</span>
-              </div>
-            </div>
+            <PipelineCard key={p.id} pipeline={p} onOpen={open} onDelete={remove} />
           ))}
         </div>
       )}

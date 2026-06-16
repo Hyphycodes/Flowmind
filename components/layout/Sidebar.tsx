@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Layers, Library, LogIn, Play, Plus, Settings } from "lucide-react";
+import { BookOpen, LayoutDashboard, Layers, Library, LogIn, Play, Plus, Settings } from "lucide-react";
 import { UsageMeter } from "@/components/billing/UsageMeter";
 import { cn } from "@/lib/ui/cn";
 
 const NAV = [
+  { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/pipelines", label: "Pipelines", icon: Layers },
   { href: "/templates", label: "Templates", icon: BookOpen },
   { href: "/library", label: "Library", icon: Library },
@@ -27,7 +28,7 @@ export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
 
       <button
         type="button"
-        onClick={() => (onNewPipeline ? onNewPipeline() : router.push("/?new=1"))}
+        onClick={() => (onNewPipeline ? onNewPipeline() : router.push("/editor?new=1"))}
         className="mt-6 flex items-center justify-center gap-2 rounded-xl border border-line-strong bg-white/[0.04] py-2.5 text-sm font-medium text-ink transition hover:bg-white/[0.09]"
       >
         <Plus size={16} /> New Pipeline

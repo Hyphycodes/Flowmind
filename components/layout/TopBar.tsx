@@ -177,7 +177,7 @@ export function TopBar() {
                           key={p.id}
                           type="button"
                           disabled={current}
-                          onClick={() => goto(`/?open=${p.id}`)}
+                          onClick={() => goto(`/editor?open=${p.id}`)}
                           className={cn(
                             "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition",
                             current ? "cursor-default text-ink" : "text-ink-dim hover:bg-white/[0.06] hover:text-ink",
@@ -197,7 +197,7 @@ export function TopBar() {
                 <div className="mt-1 space-y-0.5 border-t border-line pt-1">
                   <button
                     type="button"
-                    onClick={() => goto("/?new=1")}
+                    onClick={() => goto("/editor?new=1")}
                     className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] text-ink-dim transition hover:bg-white/[0.06] hover:text-ink"
                   >
                     <Plus size={13} /> New pipeline

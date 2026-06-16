@@ -44,7 +44,7 @@ export default function OnboardingPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ useCase: useCaseId, templateId: template }),
     }).catch(() => {});
-    window.location.href = template === "blank" ? "/?new=1" : `/?template=${template}`;
+    window.location.href = template === "blank" ? "/editor?new=1" : `/editor?template=${template}`;
   };
 
   return (

@@ -67,7 +67,7 @@ export default function TemplatesPage() {
                     {p.nodeCount} nodes · {timeAgo(p.updatedAt)}
                   </div>
                 </div>
-                <Link href={`/?open=${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-[12px] text-ink-dim transition hover:text-ink">
+                <Link href={`/editor?open=${p.id}`} className="rounded-lg border border-line px-3 py-1.5 text-[12px] text-ink-dim transition hover:text-ink">
                   Open
                 </Link>
                 <button onClick={() => remove(p.id)} className="text-ink-faint transition hover:text-red" aria-label="Delete pipeline">
@@ -92,7 +92,7 @@ function TemplateCard({ template: t, accent, packLabel }: { template: Template; 
 
   return (
     <Link
-      href={`/?template=${t.id}`}
+      href={`/editor?template=${t.id}`}
       className="group flex flex-col rounded-2xl border border-line bg-white/[0.02] p-4 transition hover:border-line-strong hover:bg-white/[0.04]"
       style={{ background: `linear-gradient(180deg, ${withAlpha(ACCENT_HEX[accent], 0.05)}, rgba(255,255,255,0.02))` }}
     >

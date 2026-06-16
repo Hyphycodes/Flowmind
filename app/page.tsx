@@ -1,7 +1,7 @@
 "use client";
 
-import { Builder } from "@/components/Builder";
+import { CommandCenter } from "@/components/CommandCenter";
 
 export default function Home() {
-  return <Builder />;
+  return <CommandCenter />;
 }

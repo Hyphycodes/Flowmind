@@ -59,7 +59,7 @@ export function Builder() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("new")) {
         startNew();
-        window.history.replaceState({}, "", "/");
+        window.history.replaceState({}, "", "/editor");
         setLoading(false);
         return;
       }
@@ -72,7 +72,7 @@ export function Builder() {
           if (hasSupabase()) await upsertPipeline(p);
           setActivePipeline(p, { ...t.exampleRun, pipelineId: p.id });
           if (t.takes?.length) hydrateTakes(t.takes.map((tk) => ({ ...tk, pipelineId: p.id })));
-          window.history.replaceState({}, "", "/");
+          window.history.replaceState({}, "", "/editor");
           setLoading(false);
           return;
         }
@@ -84,7 +84,7 @@ export function Builder() {
         if (opened) {
           const run = await getLatestRun(opened.id);
           setActivePipeline(opened, run);
-          window.history.replaceState({}, "", "/");
+          window.history.replaceState({}, "", "/editor");
           setLoading(false);
           return;
         }
@@ -196,7 +196,7 @@ function EmptyCanvas() {
 
         <div className="mt-5 flex items-center justify-center gap-2 text-[12px]">
           <Link
-            href="/?template=tpl-jarvis"
+            href="/editor?template=tpl-jarvis"
             className="flex items-center gap-1.5 rounded-lg bg-violet px-3 py-1.5 font-medium text-white transition hover:bg-violet/90"
           >
             <Sparkles size={13} /> Open the Jarvis demo
