@@ -8,7 +8,7 @@ import { UsageMeter } from "@/components/billing/UsageMeter";
 import { cn } from "@/lib/ui/cn";
 
 const NAV = [
-  { href: "/", label: "Pipelines", icon: Layers },
+  { href: "/pipelines", label: "Pipelines", icon: Layers },
   { href: "/templates", label: "Templates", icon: BookOpen },
   { href: "/library", label: "Library", icon: Library },
   { href: "/runs", label: "Runs", icon: Play },

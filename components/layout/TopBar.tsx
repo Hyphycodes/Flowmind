@@ -1,18 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   Check,
   ChevronDown,
   CloudOff,
   Loader2,
   PanelRight,
   Play,
+  Plus,
+  Search,
   Share2,
   TriangleAlert,
 } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { CreditEstimate } from "@/components/billing/CreditEstimate";
+import { hasSupabase } from "@/lib/supabase/client";
+import { listPipelines, type PipelineSummary } from "@/lib/supabase/queries";
+import { timeAgo } from "@/lib/ui/format";
 import { cn } from "@/lib/ui/cn";
 
 export function TopBar() {
@@ -26,10 +33,17 @@ export function TopBar() {
   const setExecutionMode = usePipelineStore((s) => s.setExecutionMode);
   const openExport = usePipelineStore((s) => s.openExport);
 
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const running = runStatus === "running";
+
+  // Pipeline switcher dropdown
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [switchList, setSwitchList] = useState<PipelineSummary[] | null>(null);
+  const [query, setQuery] = useState("");
+  const switcherRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -44,8 +58,49 @@ export function TopBar() {
     return () => window.removeEventListener("keydown", onKey);
   }, [runPipeline]);
 
+  // Close the switcher on outside-click or Escape.
+  useEffect(() => {
+    if (!switcherOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!switcherRef.current?.contains(e.target as Node)) setSwitcherOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSwitcherOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [switcherOpen]);
+
+  const filtered = useMemo(
+    () => (switchList ?? []).filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase())),
+    [switchList, query],
+  );
+
+  const goto = (href: string) => {
+    setSwitcherOpen(false);
+    // The editor reads ?open / ?new only on mount, so switching pipelines from inside
+    // the editor needs a full navigation. /pipelines is a separate route → client router.
+    if (href.startsWith("/pipelines")) router.push(href);
+    else window.location.assign(href);
+  };
+
+  // Toggle the switcher; fetch the list the first time it opens (in a handler, not an effect).
+  const toggleSwitcher = () => {
+    const next = !switcherOpen;
+    setSwitcherOpen(next);
+    if (next && switchList === null) {
+      if (hasSupabase()) listPipelines().then(setSwitchList);
+      else setSwitchList([]);
+    }
+  };
+
   const startEdit = () => {
     if (!pipeline) return;
+    setSwitcherOpen(false);
     setDraft(pipeline.name);
     setEditing(true);
     requestAnimationFrame(() => inputRef.current?.select());
@@ -73,14 +128,91 @@ export function TopBar() {
             className="w-64 rounded-md border border-line-strong bg-white/5 px-2 py-0.5 text-sm text-ink outline-none"
           />
         ) : (
-          <button
-            onClick={startEdit}
-            className="flex items-center gap-1 truncate font-medium text-ink hover:text-white"
-            title="Rename pipeline"
-          >
-            <span className="truncate">{pipeline?.name ?? "Untitled Pipeline"}</span>
-            <ChevronDown size={14} className="text-ink-faint" />
-          </button>
+          <div ref={switcherRef} className="relative flex items-center gap-0.5">
+            <button
+              onClick={startEdit}
+              className="max-w-[280px] truncate font-medium text-ink hover:text-white"
+              title="Rename pipeline"
+            >
+              <span className="truncate">{pipeline?.name ?? "Untitled Pipeline"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleSwitcher}
+              aria-label="Switch pipeline"
+              aria-expanded={switcherOpen}
+              title="Switch pipeline"
+              className="rounded p-0.5 text-ink-faint transition hover:bg-white/5 hover:text-ink"
+            >
+              <ChevronDown size={14} />
+            </button>
+
+            {switcherOpen && (
+              <div className="absolute left-0 top-8 z-40 w-72 rounded-xl border border-line bg-[#0c0c14] p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.6)]">
+                <div className="flex items-center gap-2 rounded-lg border border-line bg-black/30 px-2.5 py-1.5">
+                  <Search size={13} className="shrink-0 text-ink-faint" />
+                  <input
+                    autoFocus
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search pipelines…"
+                    className="w-full bg-transparent text-[12.5px] text-ink outline-none placeholder:text-ink-faint"
+                  />
+                </div>
+
+                <div className="mt-1 max-h-72 overflow-y-auto">
+                  {switchList === null ? (
+                    <div className="flex items-center justify-center py-5">
+                      <Loader2 size={15} className="animate-spin text-ink-faint" />
+                    </div>
+                  ) : filtered.length === 0 ? (
+                    <p className="px-2 py-4 text-center text-[11.5px] text-ink-faint">
+                      {switchList.length === 0 ? "No pipelines yet." : "No matches."}
+                    </p>
+                  ) : (
+                    filtered.slice(0, 8).map((p) => {
+                      const current = p.id === pipeline?.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          disabled={current}
+                          onClick={() => goto(`/?open=${p.id}`)}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition",
+                            current ? "cursor-default text-ink" : "text-ink-dim hover:bg-white/[0.06] hover:text-ink",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[12.5px]">{p.name}</div>
+                            <div className="text-[10.5px] text-ink-faint">{timeAgo(p.updatedAt)}</div>
+                          </div>
+                          {current && <Check size={13} className="shrink-0 text-violet" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="mt-1 space-y-0.5 border-t border-line pt-1">
+                  <button
+                    type="button"
+                    onClick={() => goto("/?new=1")}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] text-ink-dim transition hover:bg-white/[0.06] hover:text-ink"
+                  >
+                    <Plus size={13} /> New pipeline
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => goto("/pipelines")}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] text-ink-dim transition hover:bg-white/[0.06] hover:text-ink"
+                  >
+                    <ArrowRight size={13} /> All pipelines
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
         <SaveBadge status={saveStatus} />
       </div>
