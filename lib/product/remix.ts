@@ -7,6 +7,7 @@ import {
   type RemixProposal,
 } from "@/lib/pipeline/schema";
 import { newId } from "@/lib/pipeline/validate";
+import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
 
 /** Remix Flowmind like a creative instrument. Deterministic transforms produce a
  *  RemixProposal (changes + summary + impact) plus a proposedPipeline — the current
@@ -16,6 +17,13 @@ const CHEAP = "claude-haiku-4-5-20251001";
 const SMART = "claude-opus-4-8";
 
 export const REMIX_ACTIONS: RemixAction[] = [
+  // Structural moves (Build tab) — change the shape of the system.
+  { id: "decompose", label: "Decompose", category: "teams", instruction: "Split the busiest agent into a focused Analyze → Compose pair.", appliesTo: "pipeline" },
+  { id: "add_critic", label: "Add critic", category: "teams", instruction: "Add a critic that reviews the final output.", appliesTo: "pipeline" },
+  { id: "parallelize", label: "Parallelize", category: "speed", instruction: "Run a sequential team's members in parallel with an aggregator.", appliesTo: "pipeline" },
+  { id: "route_models", label: "Route models", category: "cost", instruction: "Route fast models to classifiers/scorers, strong models to composers.", appliesTo: "pipeline" },
+  { id: "add_source", label: "Add source", category: "data", instruction: "Switch the source to a reusable Input Studio dataset.", appliesTo: "pipeline" },
+  { id: "add_checkpoint", label: "Add checkpoint", category: "production", instruction: "Add a review checkpoint before the output ships.", appliesTo: "pipeline" },
   { id: "make_premium", label: "Make it premium", category: "quality", instruction: "Bias toward premium quality + add an evaluator.", appliesTo: "pipeline" },
   { id: "make_smarter", label: "Make it smarter", category: "quality", instruction: "Upgrade brain nodes to the strongest model.", appliesTo: "pipeline" },
   { id: "make_cheaper", label: "Make it cheaper", category: "cost", instruction: "Switch models to the fast/cheap tier.", appliesTo: "pipeline" },
@@ -138,6 +146,77 @@ function applyAction(p0: Pipeline, actionId: string): Transform | null {
       changes.push({ type: "update_product_drop", description: "Added SaaS monetization + database/export direction." });
       changes.push({ type: "update_reality_meter", description: "Flagged database + hosted API as next build steps." });
       return { pipeline: p, changes, summary: "Framed as a SaaS — monetization + database/export direction.", impact: { quality: "business-ready" }, variationName: "SaaS" };
+    }
+    case "add_critic": {
+      const change = ensureEvaluator(p);
+      if (!change) return { pipeline: p0, changes: [], summary: "A critic already reviews the output.", warnings: ["No change — a critic/evaluator is already present."] };
+      changes.push(change);
+      return { pipeline: p, changes, summary: "Added a critic that reviews the final output.", impact: { quality: "more trustworthy", complexity: "slightly higher" }, variationName: "With Critic" };
+    }
+    case "add_checkpoint": {
+      const pos = rightmost(p);
+      const key = finalOutputKey(p);
+      const node: PipelineNode = pipelineNode({ id: nodeId(p, "checkpoint"), type: "output", title: "Checkpoint", subtitle: "Review & approve", description: "Holds the output for a human to review before it ships.", role: "Review gate", color: "pink", inputs: [key], outputs: ["approved"], prompt: "Summarize what to review before sending.", position: pos });
+      p.nodes.push(node);
+      p.edges.push({ id: newId("e"), source: lastProducerId(p0, key), target: node.id, dataKey: key, animated: false });
+      changes.push({ type: "add_node", description: "Added a review checkpoint before output.", targetId: node.id });
+      return { pipeline: p, changes, summary: "Added a checkpoint to review the output before it ships.", impact: { complexity: "slightly higher" }, variationName: "With Checkpoint" };
+    }
+    case "add_source": {
+      const src = p.nodes.find((n) => n.type === "input" || n.type === "tool" || n.layer === "source");
+      if (!src) return { pipeline: p0, changes: [], summary: "No source node to strengthen.", warnings: ["No source node found."] };
+      src.source = { ...(src.source ?? {}), mode: "input_studio", prompt: src.source?.prompt ?? `Strong inputs for ${src.title}` };
+      changes.push({ type: "update_node", description: `Set ${src.title} to a reusable Input Studio dataset.`, targetId: src.id });
+      return { pipeline: p, changes, summary: "Added a reusable Input Studio source.", impact: { quality: "more testable" }, variationName: "Studio Source" };
+    }
+    case "route_models": {
+      let routed = 0;
+      for (const n of p.nodes) {
+        if (n.type === "input") continue;
+        if (n.type === "tool" || /classif|router|route|scor|rank|triage|filter/i.test(`${n.title} ${n.role}`)) { setModel(n, CHEAP); routed++; }
+        else if (n.type === "output" || /compos|synth|writ|final|judge|brief/i.test(`${n.title} ${n.role}`)) { setModel(n, SMART); routed++; }
+      }
+      if (!routed) return { pipeline: p0, changes: [], summary: "Nothing to route.", warnings: ["No nodes matched the routing heuristic."] };
+      changes.push({ type: "update_model", description: "Routed fast models to classifiers/scorers, strong models to composers." });
+      return { pipeline: p, changes, summary: "Routed each step to the right model — fast where it's cheap, strong where it counts.", impact: { cost: "lower", quality: "higher where it matters" }, variationName: "Model Routing" };
+    }
+    case "parallelize": {
+      const team = p.nodes.find((n) => n.team && n.team.strategy === "sequential" && n.team.agents.filter((a) => !a.isController).length >= 2);
+      if (!team || !team.team) return { pipeline: p0, changes: [], summary: "No sequential team to parallelize.", warnings: ["Group nodes into a team first, then parallelize it."] };
+      team.team = { ...team.team, strategy: "parallel" };
+      Object.assign(team, coordinateTeamNode(team));
+      changes.push({ type: "update_node", description: `Set ${team.title} to run its members in parallel (added an aggregator).`, targetId: team.id });
+      return { pipeline: p, changes, summary: `Parallelized ${team.title} — members run at once, merged by an aggregator.`, impact: { speed: "faster" }, variationName: "Parallelized" };
+    }
+    case "decompose": {
+      const agent = [...p.nodes]
+        .filter((n) => n.type === "agent" && !n.team)
+        .sort((a, b) => (b.prompt?.length ?? 0) - (a.prompt?.length ?? 0))[0];
+      if (!agent) return { pipeline: p0, changes: [], summary: "No agent to decompose.", warnings: ["No standalone agent found to split."] };
+      const outKey = agent.outputs[0] ?? `${agent.id}_out`;
+      const midKey = `${agent.id}_analysis`;
+      const baseTitle = agent.title;
+      const compose = pipelineNode({
+        id: nodeId(p, `${agent.id}-compose`),
+        type: "agent",
+        title: `${baseTitle} · Compose`,
+        role: "Composer",
+        color: agent.color,
+        inputs: [midKey],
+        outputs: [outKey],
+        prompt: `Using {${midKey}}, produce the final ${outKey}.`,
+        position: { x: agent.position.x + 300, y: agent.position.y },
+      });
+      // Re-target this agent as the Analyze step; downstream consumers now read Compose.
+      for (const e of p.edges) if (e.source === agent.id) e.source = compose.id;
+      agent.title = `${baseTitle} · Analyze`;
+      agent.role = "Analyst";
+      agent.outputs = [midKey];
+      agent.prompt = agent.prompt ? `First-pass analysis only. ${agent.prompt}` : `Analyze the inputs and produce ${midKey}.`;
+      p.nodes.push(compose);
+      p.edges.push({ id: newId("e"), source: agent.id, target: compose.id, dataKey: midKey, animated: false });
+      changes.push({ type: "add_node", description: `Split ${baseTitle} into Analyze → Compose.`, targetId: compose.id });
+      return { pipeline: p, changes, summary: `Decomposed ${baseTitle} into a focused Analyze → Compose pair.`, impact: { quality: "more focused", complexity: "slightly higher" }, variationName: "Decomposed" };
     }
     default:
       return null;

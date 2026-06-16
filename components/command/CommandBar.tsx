@@ -62,7 +62,7 @@ export function CommandBar() {
         { label: "Make this team smarter", run: () => startRemix("make_smarter") },
         { label: "Add an evaluator", run: () => startRemix("add_evaluator") },
         { label: "Re-run this team", run: () => void rerunTeam(selectedNode.id) },
-        { label: "Compare Takes", run: () => setPanelTab("takes") },
+        { label: "Compare Takes", run: () => setPanelTab("run") },
       ]
     : [];
   const sourceChips: { label: string; run: () => void }[] = selectedNode
@@ -103,19 +103,19 @@ export function CommandBar() {
     if (pipeline && isCommand) {
       if (/explain/.test(lower)) {
         setText("");
-        setPanelTab("product");
+        setPanelTab("build");
         explain("founder");
         return;
       }
       if (/missing|reality|how buildable/.test(lower)) {
         setText("");
-        setPanelTab("product");
-        setNotice("Reality Meter is in the Product tab.");
+        setPanelTab("build");
+        setNotice("Product structure is in the Build tab.");
         return;
       }
       if (/compare.*take|compare the last/.test(lower)) {
         setText("");
-        setPanelTab("takes");
+        setPanelTab("run");
         return;
       }
       const remix = REMIX_INTENTS.find(([re]) => re.test(lower));
