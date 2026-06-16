@@ -8,6 +8,7 @@ import {
 } from "@/lib/pipeline/schema";
 import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { builderPreferencesSchema, PREFERENCES_ID, type BuilderPreferences } from "@/lib/preferences/schema";
+import { libraryAssetSchema, type LibraryAsset } from "@/lib/library/schema";
 import type { ExportManifest } from "@/lib/export/schema";
 import { getSupabase } from "./client";
 
@@ -401,6 +402,60 @@ export async function saveBuilderPreferences(p: BuilderPreferences): Promise<boo
     { id: p.id, scope: p.scope, patterns: p.patterns, defaults: p.defaults, updated_at: new Date().toISOString() },
     { onConflict: "id" },
   );
+  return !error;
+}
+
+/* ── Library assets (reusable nodes / prompts / tools) ───────────────── */
+
+export async function listLibraryAssets(): Promise<LibraryAsset[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb.from("library_assets").select("*").order("updated_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).flatMap((r) => {
+    try {
+      return [
+        libraryAssetSchema.parse({
+          id: r.id,
+          kind: r.kind,
+          name: r.name ?? "Untitled",
+          description: r.description ?? undefined,
+          payload: r.payload ?? {},
+          tags: r.tags ?? [],
+          usageCount: r.usage_count ?? 0,
+          createdAt: r.created_at ?? new Date().toISOString(),
+          updatedAt: r.updated_at ?? new Date().toISOString(),
+        }),
+      ];
+    } catch {
+      return [];
+    }
+  });
+}
+
+export async function saveLibraryAsset(a: LibraryAsset): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("library_assets").upsert(
+    {
+      id: a.id,
+      kind: a.kind,
+      name: a.name,
+      description: a.description ?? null,
+      payload: a.payload,
+      tags: a.tags,
+      usage_count: a.usageCount,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  return !error;
+}
+
+export async function deleteLibraryAsset(id: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("library_assets").delete().eq("id", id);
   return !error;
 }
 

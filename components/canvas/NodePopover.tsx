@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, Bot, FastForward, Loader2, RotateCw, Settings2, Users, X } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, BookmarkPlus, Bot, FastForward, Loader2, RotateCw, Settings2, Users, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
@@ -117,6 +117,7 @@ function TeamSummary({
 }) {
   const enterTeam = usePipelineStore((s) => s.enterTeam);
   const openInspector = usePipelineStore((s) => s.openInspector);
+  const saveToLibrary = usePipelineStore((s) => s.saveToLibrary);
   const accent = hexFor({ color: node.color, type: node.type });
   const members = node.team!.agents.filter((a) => !a.isController);
   const controllers = node.team!.agents.filter((a) => a.isController);
@@ -157,6 +158,21 @@ function TeamSummary({
       >
         <Users size={14} /> Open team
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          saveToLibrary({
+            kind: "node",
+            name: node.title,
+            description: node.role || undefined,
+            payload: { ...node, status: "idle" },
+            tags: ["team", node.team!.strategy],
+          })
+        }
+        className="mt-2 flex w-full items-center justify-center gap-1.5 text-[11px] text-ink-dim transition hover:text-ink"
+      >
+        <BookmarkPlus size={12} /> Save team to Library
+      </button>
     </Shell>
   );
 }
@@ -187,6 +203,7 @@ function NodeDetail({
   const openInspector = usePipelineStore((s) => s.openInspector);
   const runPipeline = usePipelineStore((s) => s.runPipeline);
   const runSoloAgent = usePipelineStore((s) => s.runSoloAgent);
+  const saveToLibrary = usePipelineStore((s) => s.saveToLibrary);
   const aiAvailable = useAiAvailable();
 
   const isAgent = Boolean(agent);
@@ -225,6 +242,12 @@ function NodeDetail({
   const icon = node ? iconForNode(node) : Bot;
   const running = runStatus === "running";
   const downstreamCount = node && pipeline ? descendantsOf(pipeline, node.id).size - 1 : 0;
+
+  const saveNodeToLibrary = () => {
+    if (node) saveToLibrary({ kind: "node", name: node.title, description: node.role || undefined, payload: { ...node, status: "idle" }, tags: [node.type] });
+    else if (agent) saveToLibrary({ kind: "prompt", name: `${agent.name || agent.id} prompt`, payload: prompt });
+  };
+  const savePromptToLibrary = () => saveToLibrary({ kind: "prompt", name: `${title} prompt`, payload: prompt });
 
   return (
     <Shell style={style} popRef={popRef}>
@@ -283,6 +306,20 @@ function NodeDetail({
           )}
         </div>
         {node && aiAvailable && <ExplainButton scope="node" focusId={node.id} />}
+        <div className="flex items-center gap-2 border-t border-line/50 pt-2.5 text-[11px]">
+          <BookmarkPlus size={12} className="text-ink-faint" />
+          <button onClick={saveNodeToLibrary} className="text-ink-dim transition hover:text-ink">
+            {node ? "Save to Library" : "Save prompt"}
+          </button>
+          {node && prompt && (
+            <>
+              <span className="text-ink-faint">·</span>
+              <button onClick={savePromptToLibrary} className="text-ink-dim transition hover:text-ink">
+                prompt only
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </Shell>
   );

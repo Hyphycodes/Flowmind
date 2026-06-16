@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   pipelineSchema,
+  pipelineNodeSchema,
   type AgentConfig,
   type AgentRunTrace,
   type ExecutionMode,
@@ -31,17 +32,21 @@ import {
 import { hasSupabase } from "@/lib/supabase/client";
 import {
   deleteDataset,
+  deleteLibraryAsset,
   getBuilderPreferences,
   listDatasets,
+  listLibraryAssets,
   saveBuilderPreferences,
   saveDataset,
   saveExport,
+  saveLibraryAsset,
   saveRun,
   saveTake,
   upsertPipeline,
 } from "@/lib/supabase/queries";
 import { emptyPreferences, type BuilderPreferences } from "@/lib/preferences/schema";
 import { learnFromAppliedChanges } from "@/lib/preferences/learn";
+import { libraryAssetSchema, type LibraryAsset, type LibraryKind } from "@/lib/library/schema";
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
 import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
@@ -145,6 +150,9 @@ interface PipelineState {
   preferences: BuilderPreferences | null;
   clarify: { question: string; options: string[]; description: string } | null;
 
+  /** Living Library — reusable assets (nodes/prompts/tools) saved from your work. */
+  libraryAssets: LibraryAsset[];
+
   /** Export system */
   exportOpen: boolean;
   exporting: boolean;
@@ -236,6 +244,16 @@ interface PipelineState {
   answerClarification: (answer: string) => void;
   dismissClarification: () => void;
 
+  /** Living Library */
+  hydrateLibrary: () => Promise<void>;
+  saveToLibrary: (asset: { kind: LibraryKind; name: string; description?: string; payload: unknown; tags?: string[] }) => void;
+  removeLibraryAsset: (id: string) => Promise<void>;
+  renameLibraryAsset: (id: string, patch: { name?: string; description?: string; tags?: string[] }) => void;
+  bumpAssetUsage: (id: string) => void;
+  insertNodeKind: (kind: PipelineNode["type"]) => void;
+  insertLibraryNode: (assetId: string) => void;
+  applyPromptToSelected: (prompt: string, assetId?: string) => void;
+
   /** Export system */
   openExport: () => void;
   closeExport: () => void;
@@ -260,6 +278,24 @@ function upsertById<T extends { id: string }>(arr: T[], item: T): T[] {
   copy[i] = item;
   return copy;
 }
+
+/** Defaults for inserting a fresh built-in node from the "+ add node" palette. */
+const NODE_KIND_TITLE: Record<PipelineNode["type"], string> = {
+  input: "Input",
+  agent: "Agent",
+  tool: "Tool",
+  transformer: "Transformer",
+  evaluator: "Evaluator",
+  output: "Output",
+};
+const NODE_KIND_COLOR: Record<PipelineNode["type"], "cyan" | "violet" | "blue" | "slate" | "pink" | "gold"> = {
+  input: "cyan",
+  agent: "violet",
+  tool: "blue",
+  transformer: "slate",
+  evaluator: "pink",
+  output: "gold",
+};
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -341,6 +377,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     editing: false,
     preferences: null,
     clarify: null,
+    libraryAssets: [],
     exportOpen: false,
     exporting: false,
     exportHealth: null,
@@ -1024,6 +1061,89 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       if (!c) return;
       set({ clarify: null });
       void get().generate(c.description, undefined, { clarified: true });
+    },
+
+    /* ── Living Library ───────────────────────────────────────────────── */
+
+    hydrateLibrary: async () => {
+      const assets = hasSupabase() ? await listLibraryAssets() : [];
+      set((s) => {
+        const byId = new Map<string, LibraryAsset>();
+        for (const a of assets) byId.set(a.id, a);
+        for (const a of s.libraryAssets) byId.set(a.id, a); // keep session-saved assets
+        return { libraryAssets: [...byId.values()] };
+      });
+    },
+
+    saveToLibrary: (asset) => {
+      const full = libraryAssetSchema.parse({ id: newId("asset"), usageCount: 0, ...asset });
+      set((s) => ({ libraryAssets: [full, ...s.libraryAssets.filter((a) => a.id !== full.id)] }));
+      if (hasSupabase()) void saveLibraryAsset(full);
+      set({ notice: `Saved "${full.name}" to your Library.` });
+    },
+
+    removeLibraryAsset: async (id) => {
+      set((s) => ({ libraryAssets: s.libraryAssets.filter((a) => a.id !== id) }));
+      if (hasSupabase()) await deleteLibraryAsset(id);
+    },
+
+    renameLibraryAsset: (id, patch) => {
+      const a = get().libraryAssets.find((x) => x.id === id);
+      if (!a) return;
+      const next: LibraryAsset = { ...a, ...patch, updatedAt: new Date().toISOString() };
+      set((s) => ({ libraryAssets: s.libraryAssets.map((x) => (x.id === id ? next : x)) }));
+      if (hasSupabase()) void saveLibraryAsset(next);
+    },
+
+    bumpAssetUsage: (id) => {
+      const a = get().libraryAssets.find((x) => x.id === id);
+      if (!a) return;
+      const next: LibraryAsset = { ...a, usageCount: (a.usageCount ?? 0) + 1, updatedAt: new Date().toISOString() };
+      set((s) => ({ libraryAssets: s.libraryAssets.map((x) => (x.id === id ? next : x)) }));
+      if (hasSupabase()) void saveLibraryAsset(next);
+    },
+
+    insertNodeKind: (kind) => {
+      const p = get().pipeline;
+      if (!p) return;
+      const maxX = Math.max(0, ...p.nodes.map((n) => n.position.x));
+      const node = pipelineNodeSchema.parse({
+        id: newId(kind),
+        type: kind,
+        title: NODE_KIND_TITLE[kind],
+        color: NODE_KIND_COLOR[kind],
+        position: { x: maxX + 320, y: 40 },
+      });
+      mutate((pp) => ({ ...pp, nodes: [...pp.nodes, node] }));
+      set({ selectedNodeId: node.id, inspectorOpen: false, notice: `Added a ${NODE_KIND_TITLE[kind]} node — drag it onto another to wire it.` });
+    },
+
+    insertLibraryNode: (assetId) => {
+      const asset = get().libraryAssets.find((a) => a.id === assetId);
+      const p = get().pipeline;
+      if (!asset || asset.kind !== "node" || !p) return;
+      const parsed = pipelineNodeSchema.safeParse(asset.payload);
+      if (!parsed.success) {
+        set({ notice: "That saved node couldn't be inserted." });
+        return;
+      }
+      const maxX = Math.max(0, ...p.nodes.map((n) => n.position.x));
+      // Fresh id so it never collides with an existing node on the canvas.
+      const node: PipelineNode = { ...parsed.data, id: newId("node"), status: "idle", position: { x: maxX + 320, y: 40 } };
+      mutate((pp) => ({ ...pp, nodes: [...pp.nodes, node] }));
+      get().bumpAssetUsage(assetId);
+      set({ selectedNodeId: node.id, inspectorOpen: false, notice: `Inserted "${asset.name}".` });
+    },
+
+    applyPromptToSelected: (prompt, assetId) => {
+      const id = get().selectedNodeId;
+      if (!id) {
+        set({ notice: "Select a node first to apply this prompt." });
+        return;
+      }
+      get().setNodePrompt(id, prompt);
+      if (assetId) get().bumpAssetUsage(assetId);
+      set({ notice: "Applied the prompt to the selected node." });
     },
 
     /* ── Export system ────────────────────────────────────────────────── */

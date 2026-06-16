@@ -19,6 +19,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { PipelineCanvas } from "@/components/canvas/PipelineCanvas";
 import { NodePopover } from "@/components/canvas/NodePopover";
+import { AddNodePalette } from "@/components/canvas/AddNodePalette";
 import { CommandBar } from "@/components/command/CommandBar";
 import { DiffProposalPanel } from "@/components/command/DiffProposalPanel";
 import { NodeInspector } from "@/components/panels/NodeInspector";
@@ -136,6 +137,7 @@ export function Builder() {
         <div className="relative flex min-h-0 flex-1">
           <div className="relative min-w-0 flex-1">
             {loading ? <CanvasLoading /> : empty ? <EmptyCanvas /> : <PipelineCanvas />}
+            {!loading && !empty && <AddNodePalette />}
             <NodePopover />
             <NodeInspector />
             <CommandBar />
