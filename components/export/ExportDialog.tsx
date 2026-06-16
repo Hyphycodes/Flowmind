@@ -7,6 +7,7 @@ import { EXPORT_MODE_META, EXPORT_MODES, type ExportHealthStatus, type ExportMod
 import { GitHubExportPanel } from "@/components/github/GitHubExportPanel";
 import { GithubMark } from "@/components/github/GithubMark";
 import { CreditEstimate } from "@/components/billing/CreditEstimate";
+import { DEMO_COPY } from "@/lib/demo/copy";
 import { cn } from "@/lib/ui/cn";
 
 type Destination = "download" | "github_branch" | "github_pr";
@@ -39,6 +40,7 @@ export function ExportDialog() {
   const runExport = usePipelineStore((s) => s.runExport);
   const closeExport = usePipelineStore((s) => s.closeExport);
   const setNotice = usePipelineStore((s) => s.setNotice);
+  const demoMode = usePipelineStore((s) => s.demoMode);
 
   const [selected, setSelected] = useState<Set<ExportMode>>(new Set(EXPORT_MODES));
   const [destination, setDestination] = useState<Destination>("download");
@@ -216,7 +218,17 @@ export function ExportDialog() {
             Copy summary
           </button>
           <div className="flex-1" />
-          {isGitHub ? (
+          {demoMode ? (
+            // Show-then-gate: the whole drawer (readiness + package options) is visible above;
+            // only the final download is gated. Calm, inviting — no rejection styling.
+            <a
+              href={DEMO_COPY.signupHref}
+              className="flex items-center gap-1.5 rounded-lg bg-violet px-3.5 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-violet/90"
+            >
+              <Download size={13} />
+              {DEMO_COPY.exportGate}
+            </a>
+          ) : isGitHub ? (
             <span className="text-[10.5px] text-ink-faint">{selected.size} mode(s) included in the repo export</span>
           ) : (
             <>

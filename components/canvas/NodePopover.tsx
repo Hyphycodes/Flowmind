@@ -1,8 +1,10 @@
 "use client";
 
 import { createElement, useEffect, useLayoutEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ArrowDownToLine, ArrowUpFromLine, BookmarkPlus, Bot, FastForward, Loader2, RotateCw, Settings2, Users, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
+import { DEMO_COPY } from "@/lib/demo/copy";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
 import { resolveTeamView } from "@/lib/pipeline/teamView";
@@ -204,6 +206,7 @@ function NodeDetail({
   const runPipeline = usePipelineStore((s) => s.runPipeline);
   const runSoloAgent = usePipelineStore((s) => s.runSoloAgent);
   const saveToLibrary = usePipelineStore((s) => s.saveToLibrary);
+  const demoMode = usePipelineStore((s) => s.demoMode);
   const aiAvailable = useAiAvailable();
 
   const isAgent = Boolean(agent);
@@ -262,11 +265,17 @@ function NodeDetail({
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          onBlur={savePrompt}
+          onBlur={demoMode ? undefined : savePrompt}
+          readOnly={demoMode}
           rows={4}
           placeholder={isAgent ? "What should this agent do?" : "What should this node do?"}
           className="mt-1.5 w-full resize-none rounded-lg border border-line bg-black/30 p-2.5 text-[12.5px] leading-relaxed text-ink outline-none focus:border-line-strong"
         />
+        {demoMode && (
+          <Link href={DEMO_COPY.signupHref} className="mt-1.5 inline-block text-[11.5px] text-ink-faint transition hover:text-violet">
+            {DEMO_COPY.editGate}
+          </Link>
+        )}
       </div>
 
       <Section icon={ArrowUpFromLine} label="What went out" accent={accent}>
@@ -305,21 +314,30 @@ function NodeDetail({
             </button>
           )}
         </div>
-        {node && aiAvailable && <ExplainButton scope="node" focusId={node.id} />}
-        <div className="flex items-center gap-2 border-t border-line/50 pt-2.5 text-[11px]">
-          <BookmarkPlus size={12} className="text-ink-faint" />
-          <button onClick={saveNodeToLibrary} className="text-ink-dim transition hover:text-ink">
-            {node ? "Save to Library" : "Save prompt"}
-          </button>
-          {node && prompt && (
-            <>
-              <span className="text-ink-faint">·</span>
-              <button onClick={savePromptToLibrary} className="text-ink-dim transition hover:text-ink">
-                prompt only
-              </button>
-            </>
-          )}
-        </div>
+        {node && aiAvailable && !demoMode && <ExplainButton scope="node" focusId={node.id} />}
+        {demoMode ? (
+          <div className="flex items-center gap-2 border-t border-line/50 pt-2.5 text-[11px]">
+            <BookmarkPlus size={12} className="text-ink-faint" />
+            <Link href={DEMO_COPY.signupHref} className="text-ink-faint transition hover:text-violet">
+              {DEMO_COPY.saveGate}
+            </Link>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 border-t border-line/50 pt-2.5 text-[11px]">
+            <BookmarkPlus size={12} className="text-ink-faint" />
+            <button onClick={saveNodeToLibrary} className="text-ink-dim transition hover:text-ink">
+              {node ? "Save to Library" : "Save prompt"}
+            </button>
+            {node && prompt && (
+              <>
+                <span className="text-ink-faint">·</span>
+                <button onClick={savePromptToLibrary} className="text-ink-dim transition hover:text-ink">
+                  prompt only
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </Shell>
   );
