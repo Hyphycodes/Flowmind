@@ -187,7 +187,7 @@ interface PipelineState {
   closeInputStudio: () => void;
   generateDataset: (input: GenerateDatasetInput, opts?: { bindNodeId?: string | null }) => Promise<Dataset | null>;
   setSourceMode: (nodeId: string, mode: InputSourceMode) => void;
-  useDatasetForNode: (nodeId: string, datasetId: string) => void;
+  applyDatasetToNode: (nodeId: string, datasetId: string) => void;
   setNodeScenario: (nodeId: string, scenarioTag: string | null) => void;
   applyFieldMapping: (mapping: FieldMapping) => void;
   bindTakeTableToSource: (nodeId: string, tableId: string, snapshot: boolean) => void;
@@ -606,7 +606,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
               ? "Generated a deterministic demo dataset (no model key)."
               : `Generated "${dataset.name}" — ${dataset.rows.length} rows.`,
         });
-        if (opts.bindNodeId) get().useDatasetForNode(opts.bindNodeId, dataset.id);
+        if (opts.bindNodeId) get().applyDatasetToNode(opts.bindNodeId, dataset.id);
         return dataset;
       } catch (err) {
         set({ notice: (err as Error)?.message ?? "Dataset generation failed." });
@@ -624,7 +624,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         ),
       })),
 
-    useDatasetForNode: (nodeId, datasetId) => {
+    applyDatasetToNode: (nodeId, datasetId) => {
       const dataset = get().datasets.find((d) => d.id === datasetId);
       if (!dataset) return;
       get().upsertDataset({ ...dataset, connectedNodeId: nodeId });
@@ -674,7 +674,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
             : n,
         ),
       }));
-      if (match) get().useDatasetForNode(nodeId, match.id);
+      if (match) get().applyDatasetToNode(nodeId, match.id);
       else
         set({
           notice: tag

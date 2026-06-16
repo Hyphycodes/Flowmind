@@ -71,7 +71,7 @@ export function DatasetPanel() {
 function DatasetCard({ dataset: d, onOpen }: { dataset: Dataset; onOpen: () => void }) {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const selectedNodeId = usePipelineStore((s) => s.selectedNodeId);
-  const useDatasetForNode = usePipelineStore((s) => s.useDatasetForNode);
+  const applyDatasetToNode = usePipelineStore((s) => s.applyDatasetToNode);
   const connectedNode = d.connectedNodeId
     ? pipeline?.nodes.find((n) => n.id === d.connectedNodeId)
     : undefined;
@@ -114,7 +114,7 @@ function DatasetCard({ dataset: d, onOpen }: { dataset: Dataset; onOpen: () => v
       </button>
       {canBind && (
         <button
-          onClick={() => useDatasetForNode(selectedNodeId!, d.id)}
+          onClick={() => applyDatasetToNode(selectedNodeId!, d.id)}
           className="mt-2 w-full rounded-md border border-violet/40 bg-violet/[0.08] py-1 text-[11px] font-medium text-violet transition hover:bg-violet/[0.16]"
         >
           Use in {selectedNode?.title}
@@ -128,7 +128,7 @@ function DatasetViewer({ dataset: d }: { dataset: Dataset }) {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const selectedNodeId = usePipelineStore((s) => s.selectedNodeId);
   const setActiveDataset = usePipelineStore((s) => s.setActiveDataset);
-  const useDatasetForNode = usePipelineStore((s) => s.useDatasetForNode);
+  const applyDatasetToNode = usePipelineStore((s) => s.applyDatasetToNode);
   const upsertDataset = usePipelineStore((s) => s.upsertDataset);
   const removeDataset = usePipelineStore((s) => s.removeDataset);
   const repairDataset = usePipelineStore((s) => s.repairDataset);
@@ -203,7 +203,7 @@ function DatasetViewer({ dataset: d }: { dataset: Dataset }) {
       {/* Actions */}
       <div className="flex flex-wrap gap-1.5">
         {canBind && (
-          <Btn onClick={() => useDatasetForNode(selectedNodeId!, d.id)} accent>
+          <Btn onClick={() => applyDatasetToNode(selectedNodeId!, d.id)} accent>
             Use in {selectedNode?.title}
           </Btn>
         )}

@@ -12,7 +12,7 @@ type Status = { configured: boolean; connected: boolean; email?: string | null }
 export function DriveSourceBlock({ node }: { node: PipelineNode }) {
   const setNodeDriveSource = usePipelineStore((s) => s.setNodeDriveSource);
   const upsertDataset = usePipelineStore((s) => s.upsertDataset);
-  const useDatasetForNode = usePipelineStore((s) => s.useDatasetForNode);
+  const applyDatasetToNode = usePipelineStore((s) => s.applyDatasetToNode);
   const setNotice = usePipelineStore((s) => s.setNotice);
 
   const drive = node.source?.drive;
@@ -39,7 +39,7 @@ export function DriveSourceBlock({ node }: { node: PipelineNode }) {
     setNotice("Drive file bound to this source.");
   };
 
-  const useAsSource = async () => {
+  const applyDriveAsSource = async () => {
     if (!fileId) return;
     setBusy(true);
     setPreview(null);
@@ -60,7 +60,7 @@ export function DriveSourceBlock({ node }: { node: PipelineNode }) {
         };
         const ds = datasetFromTable(table, { name: `Drive Sheet ${fileId.slice(0, 6)}`, mode: "google_drive" });
         upsertDataset(ds);
-        useDatasetForNode(node.id, ds.id);
+        applyDatasetToNode(node.id, ds.id);
         save();
         setPreview(`${rows.length} rows · ${headers.length} columns imported.`);
       } else {
@@ -140,7 +140,7 @@ export function DriveSourceBlock({ node }: { node: PipelineNode }) {
           Bind file
         </button>
         <button
-          onClick={() => void useAsSource()}
+          onClick={() => void applyDriveAsSource()}
           disabled={busy || !fileId}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-violet/40 bg-violet/[0.1] py-1.5 text-[11px] font-medium text-violet transition hover:bg-violet/[0.18] disabled:opacity-50"
         >

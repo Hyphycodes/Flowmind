@@ -8,11 +8,11 @@ import { listRuns, type RunSummary } from "@/lib/supabase/queries";
 import { timeAgo } from "@/lib/ui/format";
 
 export default function RunsPage() {
-  const [runs, setRuns] = useState<RunSummary[] | null>(null);
+  // Start empty when there's no Supabase so the effect never has to set state synchronously.
+  const [runs, setRuns] = useState<RunSummary[] | null>(hasSupabase() ? null : []);
 
   useEffect(() => {
     if (hasSupabase()) listRuns().then(setRuns);
-    else setRuns([]);
   }, []);
 
   return (

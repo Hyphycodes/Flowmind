@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- this module coerces loosely-typed raw
+ * model output into a valid Pipeline; `any` is intentional at the untyped boundary. */
 import {
   pipelineSchema,
   COMPONENT_TYPES,
@@ -111,7 +113,7 @@ export function repairPipeline(
     rows: Array.isArray(t?.rows) ? t.rows : [],
   });
 
-  let outputTables: any[] =
+  const outputTables: any[] =
     Array.isArray(obj.outputTables) && obj.outputTables.length
       ? obj.outputTables.map(sanitizeTable)
       : [];

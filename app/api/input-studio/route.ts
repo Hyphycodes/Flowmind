@@ -14,6 +14,7 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untrusted JSON body; every field is type-guarded at use
   const b = body as any;
   const prompt = typeof b?.prompt === "string" ? b.prompt.trim() : "";
   if (!prompt) {

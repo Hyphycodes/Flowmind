@@ -27,7 +27,7 @@ export function InputStudioPanel() {
   const generating = usePipelineStore((s) => s.datasetGenerating);
   const modelAvailable = usePipelineStore((s) => s.modelAvailable);
   const generateDataset = usePipelineStore((s) => s.generateDataset);
-  const useDatasetForNode = usePipelineStore((s) => s.useDatasetForNode);
+  const applyDatasetToNode = usePipelineStore((s) => s.applyDatasetToNode);
   const upsertDataset = usePipelineStore((s) => s.upsertDataset);
   const setActiveDataset = usePipelineStore((s) => s.setActiveDataset);
   const closeInputStudio = usePipelineStore((s) => s.closeInputStudio);
@@ -51,6 +51,7 @@ export function InputStudioPanel() {
   // Prefill from the source node each time the studio opens.
   useEffect(() => {
     if (!inputStudio.open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentionally reset the form fields when the studio opens for a node
     setResultId(null);
     setName(node?.source?.datasetName ?? (node ? `${node.title} dataset` : "New dataset"));
     setPrompt(node?.source?.prompt ?? node?.description ?? "");
@@ -263,7 +264,7 @@ export function InputStudioPanel() {
           {result && node && (
             <button
               onClick={() => {
-                useDatasetForNode(node.id, result.id);
+                applyDatasetToNode(node.id, result.id);
                 closeInputStudio();
               }}
               className="rounded-lg border border-violet/40 bg-violet/[0.1] px-2.5 py-1.5 text-[12.5px] font-medium text-violet transition hover:bg-violet/[0.18]"
