@@ -67,7 +67,7 @@ export async function GET() {
   }
 
   // Export safety scanner (self-test with a known-bad sample)
-  const sample = checkExportSafety([{ path: "fake.ts", content: 'const k = "sk-ant-0123456789abcdefghijklmnop"' }]);
+  const sample = checkExportSafety([{ path: "fake.ts", content: 'const k = "sk-ant-0123456789abcdefghijklmnop"' }]); // pragma: allowlist secret -- fake key, scanner self-test
   const cleanSample = checkExportSafety([{ path: ".env.example", content: "ANTHROPIC_API_KEY=" }]);
   add("export_safety", "Export safety scanner", !sample.ok && cleanSample.ok ? "pass" : "fail", !sample.ok && cleanSample.ok ? "Blocks secrets, allows .env.example" : "Scanner self-test failed");
 

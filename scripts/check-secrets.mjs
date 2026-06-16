@@ -3,6 +3,10 @@
  * Repo secret audit (Prompt 12). Scans git-tracked files for committed credentials and verifies
  * that real env files are ignored. Run: `npm run audit:secrets`. No dependencies.
  * Exits non-zero if a likely secret is found — wire into CI before deploy.
+ *
+ * A single line may opt out with a trailing `pragma: allowlist secret` marker — reserved for
+ * known-fake test fixtures (e.g. the export-safety scanner self-test). Use sparingly; it does not
+ * weaken any rule, it just excuses one explicitly-marked line.
  */
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -44,6 +48,9 @@ for (const f of tracked) {
   }
   const lines = text.split("\n");
   for (let i = 0; i < lines.length; i++) {
+    // Allow a line to opt out with an explicit marker — only for known-fake test fixtures
+    // (e.g. the export-safety scanner self-test). Narrow + auditable; never blanket-disable.
+    if (/pragma:\s*allowlist secret/i.test(lines[i])) continue;
     for (const [name, re] of RULES) {
       if (re.test(lines[i])) {
         console.error(`✗ ${name} in ${f}:${i + 1} → ${lines[i].slice(0, 80)}`);
