@@ -3,11 +3,16 @@ import { hasAnthropicKey } from "@/lib/ai/anthropic";
 import { getBillingAccount, logCreditEvent, incrementUsageCounter } from "@/lib/billing/usage";
 import { estimateCreditsForInputStudio } from "@/lib/billing/credits";
 import { canCreateDatasetRows } from "@/lib/billing/featureGates";
+import { requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+// Requires auth + per-user rate limiting: spends provider tokens (real Claude dataset generation).
 export async function POST(req: Request) {
+  const guard = await requireAuthedAI();
+  if (guard instanceof Response) return guard;
+
   let body: unknown;
   try {
     body = await req.json();

@@ -12,13 +12,19 @@ import { canRunPipeline } from "@/lib/billing/featureGates";
 import { getCurrentUser } from "@/lib/auth/user";
 import { recordAudit } from "@/lib/governance/audit";
 import { checkRunGovernance, getPipelineWorkspace } from "@/lib/governance/enforce";
+import { requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /** Interactive run: parse + billing-gate + stream the shared run engine (lib/run/core). The same
- *  core powers the hosted Run-App and the headless trigger worker — one engine, not three. */
+ *  core powers the hosted Run-App and the headless trigger worker — one engine, not three.
+ *  Requires auth + per-user rate limiting (guard runs before the stream opens): a full/hybrid run
+ *  spends provider tokens. The public demo replays static cached data and never calls this route. */
 export async function POST(req: Request) {
+  const guard = await requireAuthedAI();
+  if (guard instanceof Response) return guard;
+
   let body: unknown;
   try {
     body = await req.json();

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { anthropicModel, hasAnthropicKey } from "@/lib/ai/anthropic";
 import { tryLoadPrompt } from "@/lib/prompts";
 import { wiredModels } from "@/lib/models/providers";
-import { safeApiError } from "@/lib/api/guards";
+import { safeApiError, requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -16,7 +16,11 @@ const schema = z.object({
 
 /** Optional AI rationale for a model recommendation (Task 01b). The optimizer's heuristic + estimate
  *  work without this — it just phrases the "why this model" in plain language. Gated on a key. */
+// Requires auth + per-user rate limiting: spends provider tokens (real Claude rationale).
 export async function POST(req: Request) {
+  const guard = await requireAuthedAI();
+  if (guard instanceof Response) return guard;
+
   if (!hasAnthropicKey()) {
     return Response.json({ error: "AI key required." }, { status: 503 });
   }

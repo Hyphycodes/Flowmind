@@ -3,15 +3,16 @@ import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { getPipeline } from "@/lib/supabase/queries";
 import { runPipelineRuntime } from "@/lib/runtime";
 import { newId } from "@/lib/pipeline/validate";
-import { safeApiError } from "@/lib/api/guards";
+import { safeApiError, requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** Hosted run endpoint for an exported pipeline.
  *  POST /api/pipelines/[pipelineId]/run  → final output + tables + packets + trace summary.
- *  Uses the portable runtime (deterministic / simulate-safe). No secrets are read or
- *  returned. Production use needs auth + rate limiting. */
+ *  Uses the portable runtime (deterministic / simulate-safe). No secrets are read or returned.
+ *  `simulate` (the default) is deterministic and token-free, so it stays open; `live`/`hybrid`
+ *  spend provider tokens and therefore require auth + per-user rate limiting. */
 export async function POST(req: Request, { params }: { params: Promise<{ pipelineId: string }> }) {
   const { pipelineId } = await params;
 
@@ -39,6 +40,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ pipelin
   }
 
   const mode = body.mode === "live" || body.mode === "hybrid" ? body.mode : "simulate";
+  // Token-spending modes require auth + rate limiting; simulate stays open (deterministic, no provider call).
+  if (mode !== "simulate") {
+    const guard = await requireAuthedAI();
+    if (guard instanceof Response) return guard;
+  }
   const input = body.input && typeof body.input === "object" ? (body.input as Record<string, unknown>) : Object.fromEntries(pipeline.mockInputs.map((f) => [f.key, f.value]));
   const datasets: Dataset[] = Array.isArray(body.datasets)
     ? body.datasets.flatMap((d) => {

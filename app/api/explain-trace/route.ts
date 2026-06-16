@@ -2,7 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { anthropicModel, hasAnthropicKey } from "@/lib/ai/anthropic";
 import { loadPrompt } from "@/lib/prompts";
-import { safeApiError } from "@/lib/api/guards";
+import { safeApiError, requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -85,7 +85,11 @@ function compactTrace(trace: unknown, scope: "node" | "run", focusId?: string) {
   };
 }
 
+// Requires auth + per-user rate limiting: spends provider tokens (real Claude trace explanation).
 export async function POST(req: Request) {
+  const guard = await requireAuthedAI();
+  if (guard instanceof Response) return guard;
+
   if (!hasAnthropicKey()) {
     return Response.json({ error: "AI key required to explain a run." }, { status: 503 });
   }

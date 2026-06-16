@@ -1,14 +1,19 @@
 import { getServerSupabase } from "@/lib/supabase/server";
 import { rowToTrigger } from "@/lib/supabase/queries";
 import { fireTrigger } from "@/lib/automation/fire";
-import { safeApiError } from "@/lib/api/guards";
+import { safeApiError, requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /** Manual controls (Task 06b): "run now" and "retry last failed" both fire the trigger through the
- *  same headless path (with observability). Triggers are owner-scoped by RLS. */
+ *  same headless path (with observability). Triggers are owner-scoped by RLS.
+ *  Requires auth + per-user rate limiting: firing a trigger runs the pipeline and spends tokens.
+ *  (The cron tick at /api/automation/tick is the machine path, gated by CRON_SECRET instead.) */
 export async function POST(req: Request) {
+  const guard = await requireAuthedAI();
+  if (guard instanceof Response) return guard;
+
   let body: unknown;
   try {
     body = await req.json();

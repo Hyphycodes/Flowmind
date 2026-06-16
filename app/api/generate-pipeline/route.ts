@@ -4,12 +4,17 @@ import { isEffort, type EffortLevel } from "@/lib/pipeline/effort";
 import { instantiatePipeline, matchTemplate } from "@/lib/pipeline/fixtures";
 import { detectAmbiguity } from "@/lib/preferences/clarify";
 import { builderPreferencesSchema, preferencesToPromptBlock } from "@/lib/preferences/schema";
-import { safeApiError } from "@/lib/api/guards";
+import { safeApiError, requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+// Requires auth + per-user rate limiting: this route spends provider tokens (real Claude
+// generation), so anonymous access would expose the API key to abuse.
 export async function POST(req: Request) {
+  const guard = await requireAuthedAI();
+  if (guard instanceof Response) return guard;
+
   let body: unknown;
   try {
     body = await req.json();

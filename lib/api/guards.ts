@@ -30,6 +30,22 @@ export async function requireUser(): Promise<AuthedContext | Response> {
   return { user, sb };
 }
 
+/**
+ * Auth + rate-limit guard for token-spending AI routes (Prompt 10). One call per route: rejects
+ * anonymous requests with 401, then applies the per-user sliding-window rate limit (429 on
+ * exceed). Returns `{ user, sb }` on success or a Response to return immediately. This is the
+ * single composed guard every provider-calling route should use at the top of its handler.
+ */
+export async function requireAuthedAI(): Promise<AuthedContext | Response> {
+  const auth = await requireUser();
+  if (isGuardResponse(auth)) return auth;
+  // Lazy import keeps the Upstash SDK out of routes that don't spend tokens.
+  const { enforceRateLimit } = await import("./rateLimit");
+  const limited = await enforceRateLimit(auth.user.id);
+  if (isGuardResponse(limited)) return limited;
+  return auth;
+}
+
 /** Validate a request body against a Zod schema. Returns parsed data or a 400 Response. */
 export async function validateJsonBody<T>(req: Request, schema: z.ZodSchema<T>): Promise<T | Response> {
   let raw: unknown;

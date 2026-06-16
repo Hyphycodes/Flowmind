@@ -4,12 +4,16 @@ import { pipelineSchema } from "@/lib/pipeline/schema";
 import { editProposalSchema, screenChanges } from "@/lib/pipeline/editDiff";
 import { builderPreferencesSchema, preferencesToPromptBlock } from "@/lib/preferences/schema";
 import { tryLoadPrompt } from "@/lib/prompts";
-import { safeApiError } from "@/lib/api/guards";
+import { safeApiError, requireAuthedAI } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
+// Requires auth + per-user rate limiting: spends provider tokens (real Claude edit diffs).
 export async function POST(req: Request) {
+  const guard = await requireAuthedAI();
+  if (guard instanceof Response) return guard;
+
   if (!hasAnthropicKey()) {
     // No fake diffs — edits require a real model.
     return Response.json({ error: "An Anthropic API key is required to edit a pipeline by talking." }, { status: 503 });
