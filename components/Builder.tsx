@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, Sparkles } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 import { pipelineSchema } from "@/lib/pipeline/schema";
 import { FIXTURE_DATASETS, getTemplate, instantiatePipeline } from "@/lib/pipeline/fixtures";
 import { newId } from "@/lib/pipeline/validate";
@@ -51,7 +52,7 @@ export function Builder() {
       uiBindings: [],
     });
     setActivePipeline(blank, null);
-    if (hasSupabase()) void upsertPipeline(blank);
+    if (hasSupabase()) void upsertPipeline(blank, useWorkspaceStore.getState().activeWorkspaceId);
   };
 
   useEffect(() => {

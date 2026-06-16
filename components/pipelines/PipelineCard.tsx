@@ -1,20 +1,23 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { FolderInput, Trash2 } from "lucide-react";
 import type { PipelineSummary } from "@/lib/supabase/queries";
 import { timeAgo } from "@/lib/ui/format";
 
 /** Shared pipeline card used by the Pipelines index and the Command Center grid.
- *  Opens the editor on click; optional delete + an optional extra footer slot (e.g. cost). */
+ *  Opens the editor on click; optional delete, optional move-to-workspace, and an optional
+ *  extra footer slot (e.g. cost). */
 export function PipelineCard({
   pipeline: p,
   onOpen,
   onDelete,
+  onMove,
   footer,
 }: {
   pipeline: PipelineSummary;
   onOpen: (id: string) => void;
   onDelete?: (e: React.MouseEvent, id: string, name: string) => void;
+  onMove?: (id: string, name: string) => void;
   footer?: React.ReactNode;
 }) {
   return (
@@ -30,6 +33,19 @@ export function PipelineCard({
       }}
       className="group relative flex cursor-pointer flex-col rounded-2xl border border-line bg-white/[0.02] p-4 transition hover:border-line-strong hover:bg-white/[0.04]"
     >
+      {onMove && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onMove(p.id, p.name);
+          }}
+          aria-label="Move to another workspace"
+          title="Move to another workspace"
+          className="absolute right-9 top-3 text-ink-faint opacity-0 transition hover:text-violet focus:opacity-100 group-hover:opacity-100"
+        >
+          <FolderInput size={15} />
+        </button>
+      )}
       {onDelete && (
         <button
           onClick={(e) => onDelete(e, p.id, p.name)}

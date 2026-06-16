@@ -7,6 +7,8 @@ import { PageShell } from "@/components/layout/PageShell";
 import { PipelineCard } from "@/components/pipelines/PipelineCard";
 import { hasSupabase } from "@/lib/supabase/client";
 import { deletePipeline, listPipelines, type PipelineSummary } from "@/lib/supabase/queries";
+import { useWorkspaceStore } from "@/store/workspaceStore";
+import { transferPipeline } from "@/lib/workspace/queries";
 
 export default function PipelinesPage() {
   const router = useRouter();
@@ -24,6 +26,19 @@ export default function PipelinesPage() {
   };
 
   const open = (id: string) => router.push(`/editor?open=${id}`);
+
+  // Agency → client handoff: move a pipeline to another workspace (must be editor in both, per RLS).
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const activeId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const move = async (id: string, name: string) => {
+    const others = workspaces.filter((w) => w.id !== activeId);
+    if (others.length === 0) return;
+    const pick = window.prompt(`Move "${name}" to a workspace:\n${others.map((w, i) => `${i + 1}. ${w.name}`).join("\n")}\n\nEnter a number:`);
+    const idx = Number(pick) - 1;
+    if (others[idx] && (await transferPipeline(id, others[idx].id))) {
+      setPipelines((s) => (s ? s.filter((p) => p.id !== id) : s));
+    }
+  };
 
   return (
     <PageShell title="Pipelines" subtitle="Your pipelines">
@@ -58,7 +73,7 @@ export default function PipelinesPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {pipelines.map((p) => (
-            <PipelineCard key={p.id} pipeline={p} onOpen={open} onDelete={remove} />
+            <PipelineCard key={p.id} pipeline={p} onOpen={open} onDelete={remove} onMove={workspaces.length >= 2 ? move : undefined} />
           ))}
         </div>
       )}

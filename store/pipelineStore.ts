@@ -51,6 +51,7 @@ import { emptyPreferences, type BuilderPreferences } from "@/lib/preferences/sch
 import { learnFromAppliedChanges } from "@/lib/preferences/learn";
 import { libraryAssetSchema, type LibraryAsset, type LibraryKind } from "@/lib/library/schema";
 import { type Trigger } from "@/lib/automation/schema";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
 import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
@@ -1314,7 +1315,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         get().setActivePipeline(p, null);
         if (j.note) set({ notice: j.note });
         if (hasSupabase()) {
-          const ok = await upsertPipeline(p);
+          const ok = await upsertPipeline(p, useWorkspaceStore.getState().activeWorkspaceId);
           set({ saveStatus: ok ? "saved" : "error" });
         }
       } catch (err) {

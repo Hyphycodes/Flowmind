@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BookOpen, LayoutDashboard, Layers, Library, LogIn, Play, Plus, Settings } from "lucide-react";
 import { UsageMeter } from "@/components/billing/UsageMeter";
+import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
 import { cn } from "@/lib/ui/cn";
 
 const NAV = [
@@ -25,6 +26,8 @@ export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
       <Link href="/" className="px-2 font-display text-[26px] italic leading-none tracking-tight text-ink">
         flowmind
       </Link>
+
+      <WorkspaceSwitcher />
 
       <button
         type="button"

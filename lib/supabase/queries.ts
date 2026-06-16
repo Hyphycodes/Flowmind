@@ -164,19 +164,22 @@ export async function getPipeline(id: string): Promise<Pipeline | null> {
   }
 }
 
-export async function upsertPipeline(p: Pipeline): Promise<boolean> {
+export async function upsertPipeline(p: Pipeline, workspaceId?: string | null): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  const { error } = await sb.from("pipelines").upsert(
-    {
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      graph: graphOf(p),
-      is_template: false,
-    },
-    { onConflict: "id" },
-  );
+  const base: Record<string, unknown> = {
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    graph: graphOf(p),
+    is_template: false,
+  };
+  // Attach the active workspace on create (migration 0015). Falls back if the column isn't applied.
+  if (workspaceId) {
+    const withWs = await sb.from("pipelines").upsert({ ...base, workspace_id: workspaceId }, { onConflict: "id" });
+    if (!withWs.error) return true;
+  }
+  const { error } = await sb.from("pipelines").upsert(base, { onConflict: "id" });
   return !error;
 }
 
