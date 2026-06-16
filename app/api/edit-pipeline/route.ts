@@ -2,6 +2,7 @@ import { generateObject } from "ai";
 import { anthropicModel, hasAnthropicKey } from "@/lib/ai/anthropic";
 import { pipelineSchema } from "@/lib/pipeline/schema";
 import { editProposalSchema, screenChanges } from "@/lib/pipeline/editDiff";
+import { builderPreferencesSchema, preferencesToPromptBlock } from "@/lib/preferences/schema";
 import { tryLoadPrompt } from "@/lib/prompts";
 import { safeApiError } from "@/lib/api/guards";
 
@@ -20,7 +21,13 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const b = (body ?? {}) as { pipeline?: unknown; request?: unknown; remixAction?: unknown; selectedNodeId?: unknown };
+  const b = (body ?? {}) as {
+    pipeline?: unknown;
+    request?: unknown;
+    remixAction?: unknown;
+    selectedNodeId?: unknown;
+    preferences?: unknown;
+  };
 
   const parsed = pipelineSchema.safeParse(b.pipeline);
   if (!parsed.success) return Response.json({ error: "Invalid pipeline" }, { status: 400 });
@@ -33,8 +40,12 @@ export async function POST(req: Request) {
     return Response.json({ error: "Describe the change you want." }, { status: 400 });
   }
 
-  const system = tryLoadPrompt("02-editor");
-  if (!system) return Response.json({ error: "Editor unavailable." }, { status: 500 });
+  const base = tryLoadPrompt("02-editor");
+  if (!base) return Response.json({ error: "Editor unavailable." }, { status: 500 });
+  // Builder preferences → soft guidance (nudges, never overrides the explicit request).
+  const prefs = builderPreferencesSchema.safeParse(b.preferences);
+  const guidance = prefs.success ? preferencesToPromptBlock(prefs.data) : null;
+  const system = guidance ? `${base}\n\n${guidance}` : base;
 
   // Slim the pipeline the model reasons over (it doesn't need run/product cruft).
   const slim = {

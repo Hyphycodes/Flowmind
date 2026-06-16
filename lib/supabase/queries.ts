@@ -7,6 +7,7 @@ import {
   type Take,
 } from "@/lib/pipeline/schema";
 import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
+import { builderPreferencesSchema, PREFERENCES_ID, type BuilderPreferences } from "@/lib/preferences/schema";
 import type { ExportManifest } from "@/lib/export/schema";
 import { getSupabase } from "./client";
 
@@ -369,6 +370,37 @@ export async function saveTake(t: Take): Promise<boolean> {
   const rich = await sb.from("takes").insert({ ...base, ...extra });
   if (!rich.error) return true;
   const { error } = await sb.from("takes").insert(base);
+  return !error;
+}
+
+/* ── Builder preferences (the copilot that remembers) ────────────────── */
+
+export async function getBuilderPreferences(): Promise<BuilderPreferences | null> {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data, error } = await sb.from("builder_preferences").select("*").eq("id", PREFERENCES_ID).maybeSingle();
+  if (error || !data) return null;
+  try {
+    const row = data as { id: string; scope?: string; patterns?: unknown; defaults?: unknown; updated_at?: string };
+    return builderPreferencesSchema.parse({
+      id: row.id,
+      scope: row.scope ?? "user",
+      patterns: row.patterns ?? [],
+      defaults: row.defaults ?? {},
+      updatedAt: row.updated_at ?? new Date().toISOString(),
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function saveBuilderPreferences(p: BuilderPreferences): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("builder_preferences").upsert(
+    { id: p.id, scope: p.scope, patterns: p.patterns, defaults: p.defaults, updated_at: new Date().toISOString() },
+    { onConflict: "id" },
+  );
   return !error;
 }
 

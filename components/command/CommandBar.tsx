@@ -31,6 +31,9 @@ export function CommandBar() {
   const proposeEdit = usePipelineStore((s) => s.proposeEdit);
   const editing = usePipelineStore((s) => s.editing);
   const editProposal = usePipelineStore((s) => s.editProposal);
+  const clarify = usePipelineStore((s) => s.clarify);
+  const answerClarification = usePipelineStore((s) => s.answerClarification);
+  const dismissClarification = usePipelineStore((s) => s.dismissClarification);
   const effort = usePipelineStore((s) => s.effort);
   const setEffort = usePipelineStore((s) => s.setEffort);
   const notice = usePipelineStore((s) => s.notice);
@@ -94,7 +97,14 @@ export function CommandBar() {
 
   const submit = (value?: string) => {
     const v = (value ?? text).trim();
-    if (!v || busy) return;
+    if (busy) return;
+    // While a clarifying question is open, the input answers it (empty = "just build it").
+    if (clarify) {
+      setText("");
+      answerClarification(v);
+      return;
+    }
+    if (!v) return;
     const lower = v.toLowerCase();
 
     // Export intents act on the current pipeline (not an edit).
@@ -133,6 +143,33 @@ export function CommandBar() {
         </div>
       ) : null}
 
+      {/* Ask-or-build: one inline clarifying question, with quick-picks + a "just build it" escape. */}
+      {clarify && (
+        <div className="pointer-events-auto w-full max-w-2xl rounded-2xl p-3.5 glass-strong fm-fade-up shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+          <div className="flex items-start gap-2">
+            <Sparkles size={14} className="mt-0.5 shrink-0 text-violet" />
+            <p className="text-[12.5px] leading-relaxed text-ink">{clarify.question}</p>
+          </div>
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {clarify.options.map((o) => (
+              <button
+                key={o}
+                onClick={() => answerClarification(o)}
+                className="rounded-full border border-violet/30 bg-violet/[0.06] px-3 py-1 text-xs text-violet transition hover:bg-violet/[0.12]"
+              >
+                {o}
+              </button>
+            ))}
+            <button
+              onClick={dismissClarification}
+              className="rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:text-ink"
+            >
+              Just build something
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="pointer-events-auto w-full max-w-2xl">
         <form
           onSubmit={(e) => {
@@ -145,7 +182,13 @@ export function CommandBar() {
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder={hasPipeline ? "Tell the copilot what to change…" : "Describe the AI system you want to build…"}
+            placeholder={
+              clarify
+                ? "Answer in a sentence, or press enter to just build it…"
+                : hasPipeline
+                  ? "Tell the copilot what to change…"
+                  : "Describe the AI system you want to build…"
+            }
             className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
           {/* Effort sizes from-scratch generation only; on an existing pipeline edits ignore it. */}
@@ -174,8 +217,8 @@ export function CommandBar() {
             {busy ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={16} />}
           </button>
         </form>
-        {/* Hide the chips while a proposal is open so the focus is the diff. */}
-        {!editProposal && (
+        {/* Hide the chips while a proposal or a clarifying question is open. */}
+        {!editProposal && !clarify && (
           <div className="mt-2 flex flex-wrap justify-center gap-1.5">
             {contextChips
               ? contextChips.map((c) => (

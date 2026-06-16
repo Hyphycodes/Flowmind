@@ -32,6 +32,7 @@ export function Builder() {
   const setActivePipeline = usePipelineStore((s) => s.setActivePipeline);
   const hydrateDatasets = usePipelineStore((s) => s.hydrateDatasets);
   const hydrateTakes = usePipelineStore((s) => s.hydrateTakes);
+  const hydratePreferences = usePipelineStore((s) => s.hydratePreferences);
   const pipeline = usePipelineStore((s) => s.pipeline);
   const [loading, setLoading] = useState(true);
   const booted = useRef(false);
@@ -55,6 +56,7 @@ export function Builder() {
     booted.current = true;
 
     void hydrateDatasets(FIXTURE_DATASETS);
+    void hydratePreferences();
 
     (async () => {
       const params = new URLSearchParams(window.location.search);

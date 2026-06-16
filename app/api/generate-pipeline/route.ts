@@ -2,6 +2,8 @@ import { hasAnthropicKey } from "@/lib/ai/anthropic";
 import { generateArchitectPipeline } from "@/lib/pipeline/architect";
 import { isEffort, type EffortLevel } from "@/lib/pipeline/effort";
 import { instantiatePipeline, matchTemplate } from "@/lib/pipeline/fixtures";
+import { detectAmbiguity } from "@/lib/preferences/clarify";
+import { builderPreferencesSchema, preferencesToPromptBlock } from "@/lib/preferences/schema";
 import { safeApiError } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
@@ -14,7 +16,7 @@ export async function POST(req: Request) {
   } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const raw = (body ?? {}) as { description?: unknown; effort?: unknown };
+  const raw = (body ?? {}) as { description?: unknown; effort?: unknown; clarified?: unknown; preferences?: unknown };
   const description = typeof raw.description === "string" ? raw.description.trim() : "";
   const effort: EffortLevel = isEffort(raw.effort) ? raw.effort : "balanced";
   if (!description) {
@@ -23,6 +25,18 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // Ask-or-build: one sharp question only when genuinely ambiguous, and never on a re-submit.
+  if (raw.clarified !== true) {
+    const amb = detectAmbiguity(description);
+    if (amb.ambiguous) {
+      return Response.json({ needsClarification: true, question: amb.question, options: amb.options });
+    }
+  }
+
+  // Builder preferences → soft guidance injected into the system prompt (nudges, never overrides).
+  const prefs = builderPreferencesSchema.safeParse(raw.preferences);
+  const guidance = prefs.success ? preferencesToPromptBlock(prefs.data) : null;
 
   if (!hasAnthropicKey()) {
     const t = matchTemplate(description);
@@ -35,7 +49,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const pipeline = await generateArchitectPipeline(description, effort);
+    const pipeline = await generateArchitectPipeline(description, effort, guidance ?? undefined);
     return Response.json({ pipeline, source: "ai", effort });
   } catch (err) {
     const t = matchTemplate(description);

@@ -323,7 +323,7 @@ function toolCatalog(): string {
     .join("\n");
 }
 
-function systemPrompt(effort: EffortLevel): string {
+function systemPrompt(effort: EffortLevel, guidance?: string): string {
   return [
     "You are Architect, the pipeline designer inside Flowmind. A person describes an AI system they want in plain language. You return a single pipeline: a set of nodes wired together, grouped into teams where it helps. You design the structure only — you do not run anything and you do not write the final answer to their problem.",
     "",
@@ -356,6 +356,7 @@ function systemPrompt(effort: EffortLevel): string {
     toolCatalog(),
     "",
     "Rules: every edge connects ids that exist. Every node except input must be reachable from input; every node except output must reach output. Every name in a node's inputs must appear in some upstream node's outputs (or the input node's fields). ids are unique, snake_case, no spaces. If the request is too vague to design from, still return a reasonable best-guess pipeline rather than asking a question.",
+    ...(guidance ? ["", guidance] : []),
   ].join("\n");
 }
 
@@ -366,6 +367,7 @@ function systemPrompt(effort: EffortLevel): string {
 export async function generateArchitectPipeline(
   description: string,
   effort: EffortLevel = "balanced",
+  guidance?: string,
 ): Promise<Pipeline> {
   const model = anthropicModel();
   const temperature = effort === "tight" ? 0.2 : effort === "deep" ? 0.6 : 0.4;
@@ -373,7 +375,7 @@ export async function generateArchitectPipeline(
   const { object } = await generateObject({
     model,
     schema: genSchema,
-    system: systemPrompt(effort),
+    system: systemPrompt(effort, guidance),
     prompt: `Design the pipeline for: ${description}`,
     temperature,
     maxRetries: 1,

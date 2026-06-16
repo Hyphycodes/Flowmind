@@ -8,6 +8,7 @@ import { ProviderStatus } from "@/components/models/ProviderStatus";
 import { ToolRegistry } from "@/components/tools/ToolRegistry";
 import { ConnectedAccounts } from "@/components/auth/ConnectedAccounts";
 import { GitHubConnection } from "@/components/github/GitHubConnection";
+import { BuilderPreferencesPanel } from "@/components/preferences/BuilderPreferencesPanel";
 
 type Status = { anthropic: boolean; model: string; supabase: boolean };
 
@@ -54,6 +55,8 @@ export default function SettingsPage() {
             <GitHubConnection />
           </div>
         </section>
+
+        <BuilderPreferencesPanel />
 
         <ProviderStatus />
         <ToolRegistry />

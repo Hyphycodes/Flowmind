@@ -31,13 +31,17 @@ import {
 import { hasSupabase } from "@/lib/supabase/client";
 import {
   deleteDataset,
+  getBuilderPreferences,
   listDatasets,
+  saveBuilderPreferences,
   saveDataset,
   saveExport,
   saveRun,
   saveTake,
   upsertPipeline,
 } from "@/lib/supabase/queries";
+import { emptyPreferences, type BuilderPreferences } from "@/lib/preferences/schema";
+import { learnFromAppliedChanges } from "@/lib/preferences/learn";
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
 import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
@@ -137,6 +141,10 @@ interface PipelineState {
   editChecked: Record<string, boolean>;
   editing: boolean;
 
+  /** Builder preferences (learned + explicit) + the ask-or-build clarification prompt. */
+  preferences: BuilderPreferences | null;
+  clarify: { question: string; options: string[]; description: string } | null;
+
   /** Export system */
   exportOpen: boolean;
   exporting: boolean;
@@ -221,6 +229,13 @@ interface PipelineState {
   applyEditProposal: (which: "selected" | "all") => void;
   discardEditProposal: () => void;
 
+  /** Builder preferences + ask-or-build clarification */
+  hydratePreferences: () => Promise<void>;
+  forgetPreference: (id: string) => void;
+  addExplicitPreference: (statement: string) => void;
+  answerClarification: (answer: string) => void;
+  dismissClarification: () => void;
+
   /** Export system */
   openExport: () => void;
   closeExport: () => void;
@@ -228,7 +243,7 @@ interface PipelineState {
   closeUpgrade: () => void;
   runExport: (modes: ExportMode[]) => Promise<void>;
 
-  generate: (description: string, effort?: EffortLevel) => Promise<void>;
+  generate: (description: string, effort?: EffortLevel, opts?: { clarified?: boolean }) => Promise<void>;
   runPipeline: (options?: RunOptions) => Promise<void>;
   rerunTeam: (nodeId: string) => Promise<void>;
   runSoloAgent: (nodeId: string, agentId: string) => Promise<void>;
@@ -324,6 +339,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     editProposal: null,
     editChecked: {},
     editing: false,
+    preferences: null,
+    clarify: null,
     exportOpen: false,
     exporting: false,
     exportHealth: null,
@@ -876,7 +893,13 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         const res = await fetch("/api/edit-pipeline", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pipeline: p, request, remixAction: opts.remixAction, selectedNodeId: get().selectedNodeId ?? undefined }),
+          body: JSON.stringify({
+            pipeline: p,
+            request,
+            remixAction: opts.remixAction,
+            selectedNodeId: get().selectedNodeId ?? undefined,
+            preferences: get().preferences ?? undefined,
+          }),
         });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -941,9 +964,67 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       });
       get().refreshProduct();
       scheduleSave();
+
+      // Learn from what was actually applied — observed patterns only, persisted best-effort.
+      const base = get().preferences ?? emptyPreferences();
+      const learned = learnFromAppliedChanges(base, toApply);
+      if (learned !== base) {
+        set({ preferences: learned });
+        if (hasSupabase()) void saveBuilderPreferences(learned);
+      }
     },
 
     discardEditProposal: () => set({ editProposal: null, editChecked: {} }),
+
+    /* ── Builder preferences + ask-or-build clarification ─────────────── */
+
+    hydratePreferences: async () => {
+      const stored = hasSupabase() ? await getBuilderPreferences() : null;
+      set({ preferences: stored ?? emptyPreferences() });
+    },
+
+    forgetPreference: (id) => {
+      const prefs = get().preferences;
+      if (!prefs) return;
+      const next: BuilderPreferences = {
+        ...prefs,
+        patterns: prefs.patterns.filter((p) => p.id !== id),
+        updatedAt: new Date().toISOString(),
+      };
+      set({ preferences: next });
+      if (hasSupabase()) void saveBuilderPreferences(next);
+    },
+
+    addExplicitPreference: (statement) => {
+      const text = statement.trim();
+      if (!text) return;
+      const prefs = get().preferences ?? emptyPreferences();
+      const next: BuilderPreferences = {
+        ...prefs,
+        patterns: [
+          { id: newId("pref"), kind: "other", statement: text, source: "explicit", weight: 5, lastSeenAt: new Date().toISOString() },
+          ...prefs.patterns,
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+      set({ preferences: next });
+      if (hasSupabase()) void saveBuilderPreferences(next);
+    },
+
+    answerClarification: (answer) => {
+      const c = get().clarify;
+      if (!c) return;
+      const combined = answer.trim() ? `${c.description} — ${answer.trim()}` : c.description;
+      set({ clarify: null });
+      void get().generate(combined, undefined, { clarified: true });
+    },
+
+    dismissClarification: () => {
+      const c = get().clarify;
+      if (!c) return;
+      set({ clarify: null });
+      void get().generate(c.description, undefined, { clarified: true });
+    },
 
     /* ── Export system ────────────────────────────────────────────────── */
 
@@ -1005,17 +1086,33 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       }
     },
 
-    generate: async (description, effort) => {
+    generate: async (description, effort, opts = {}) => {
       if (!description.trim() || get().generating) return;
       const level = effort ?? get().effort;
-      set({ generating: true, notice: null });
+      set({ generating: true, notice: null, clarify: null });
       try {
         const res = await fetch("/api/generate-pipeline", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ description, effort: level }),
+          body: JSON.stringify({
+            description,
+            effort: level,
+            clarified: opts.clarified,
+            preferences: get().preferences ?? undefined,
+          }),
         });
         const j = await res.json().catch(() => ({}));
+        // Ask-or-build: surface one inline clarifying question instead of a pipeline.
+        if (j.needsClarification) {
+          set({
+            clarify: {
+              question: j.question ?? "What should it do?",
+              options: Array.isArray(j.options) ? j.options : [],
+              description,
+            },
+          });
+          return;
+        }
         if (!res.ok || !j.pipeline) {
           set({ notice: j.error ?? "Generation failed." });
           return;
