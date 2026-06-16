@@ -28,6 +28,7 @@ import { InputStudioPanel } from "@/components/panels/InputStudioPanel";
 import { RemixProposalModal } from "@/components/product/RemixProposalModal";
 import { ExportDialog } from "@/components/export/ExportDialog";
 import { ShareModal } from "@/components/sharing/ShareModal";
+import { TriggersModal } from "@/components/automation/TriggersModal";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 
 export function Builder() {
@@ -147,6 +148,7 @@ export function Builder() {
             <RemixProposalModal />
             <ExportDialog />
             <ShareModal />
+            <TriggersModal />
             <UpgradeModal />
           </div>
           <OutputPanel />

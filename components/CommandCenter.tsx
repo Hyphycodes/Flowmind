@@ -207,6 +207,9 @@ export function CommandCenter() {
                         <span className="block truncate text-[12.5px] text-ink">{r.title}</span>
                         <span className="block truncate text-[10.5px] text-ink-faint">{nameOf(r.pipelineId)}</span>
                       </span>
+                      {r.source && r.source !== "manual" && (
+                        <span className="shrink-0 rounded bg-violet/15 px-1.5 py-0.5 text-[9px] font-medium text-violet">{r.source}</span>
+                      )}
                       <span className="shrink-0 text-[10.5px] text-ink-faint">{timeAgo(r.createdAt)}</span>
                     </button>
                   ))}

@@ -773,6 +773,8 @@ export const runTraceSchema = z.object({
   takeId: z.string().optional(),
   costUsd: z.number().optional(),
   latencyMs: z.number().optional(),
+  /** how this run was started (Task 06) — manual click vs an automation trigger */
+  source: z.enum(["manual", "schedule", "webhook", "pipeline"]).optional(),
 });
 export type RunTrace = z.infer<typeof runTraceSchema>;
 

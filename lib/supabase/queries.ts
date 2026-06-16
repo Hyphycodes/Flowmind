@@ -10,6 +10,7 @@ import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { builderPreferencesSchema, PREFERENCES_ID, type BuilderPreferences } from "@/lib/preferences/schema";
 import { libraryAssetSchema, type LibraryAsset } from "@/lib/library/schema";
 import { pipelineShareSchema, type PipelineShare } from "@/lib/sharing/schema";
+import { triggerSchema, type Trigger } from "@/lib/automation/schema";
 import type { ExportManifest } from "@/lib/export/schema";
 import { getSupabase } from "./client";
 
@@ -27,6 +28,7 @@ export type RunSummary = {
   status: string;
   title: string;
   createdAt: string;
+  source?: string;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -188,7 +190,7 @@ export async function deletePipeline(id: string): Promise<boolean> {
 export async function saveRun(run: RunTrace): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
-  const { error } = await sb.from("runs").insert({
+  const base = {
     pipeline_id: run.pipelineId,
     status: run.status,
     trace: {
@@ -202,12 +204,17 @@ export async function saveRun(run: RunTrace): Promise<boolean> {
       takeId: run.takeId ?? null,
       costUsd: run.costUsd ?? null,
       latencyMs: run.latencyMs ?? null,
+      source: run.source ?? null,
     },
     tables: run.tables,
     final_output: run.finalOutput ?? null,
     started_at: run.startedAt ?? null,
     finished_at: run.finishedAt ?? null,
-  });
+  };
+  // Try with the source column (migration 0013); fall back if it isn't applied yet.
+  const withSource = await sb.from("runs").insert({ ...base, source: run.source ?? "manual" });
+  if (!withSource.error) return true;
+  const { error } = await sb.from("runs").insert(base);
   return !error;
 }
 
@@ -253,18 +260,29 @@ export async function getLatestRun(pipelineId: string): Promise<RunTrace | null>
 export async function listRuns(limit = 40): Promise<RunSummary[]> {
   const sb = getSupabase();
   if (!sb) return [];
-  const { data, error } = await sb
+  // Try with the source column (migration 0013); fall back if it isn't applied yet.
+  const withSource = await sb
     .from("runs")
-    .select("id,pipeline_id,status,final_output,created_at")
+    .select("id,pipeline_id,status,final_output,created_at,source")
     .order("created_at", { ascending: false })
     .limit(limit);
-  if (error || !data) return [];
-  return (data as RunRow[]).map((r) => ({
+  const data = withSource.error
+    ? (
+        await sb
+          .from("runs")
+          .select("id,pipeline_id,status,final_output,created_at")
+          .order("created_at", { ascending: false })
+          .limit(limit)
+      ).data
+    : withSource.data;
+  if (!data) return [];
+  return (data as (RunRow & { source?: string | null })[]).map((r) => ({
     id: r.id,
     pipelineId: r.pipeline_id,
     status: r.status,
     title: stringField(r.final_output, "title", "Run"),
     createdAt: r.created_at,
+    source: r.source ?? undefined,
   }));
 }
 
@@ -517,6 +535,75 @@ export async function deleteShare(id: string): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
   const { error } = await sb.from("pipeline_shares").delete().eq("id", id);
+  return !error;
+}
+
+/* ── Triggers (automation) ───────────────────────────────────────────── */
+
+export function rowToTrigger(r: Record<string, unknown>): Trigger | null {
+  try {
+    return triggerSchema.parse({
+      id: r.id,
+      pipelineId: r.pipeline_id,
+      ownerId: (r.user_id as string | null) ?? null,
+      enabled: r.enabled ?? true,
+      type: r.type,
+      name: r.name ?? "",
+      schedule: r.schedule ?? undefined,
+      webhook: r.webhook ?? undefined,
+      upstreamPipelineId: (r.upstream_pipeline_id as string | null) ?? undefined,
+      defaultInputs: r.default_inputs ?? {},
+      createdAt: r.created_at ?? new Date().toISOString(),
+      updatedAt: r.updated_at ?? new Date().toISOString(),
+      lastFiredAt: (r.last_fired_at as string | null) ?? undefined,
+      lastStatus: (r.last_status as string | null) ?? undefined,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function triggerToRow(t: Trigger): Record<string, unknown> {
+  return {
+    id: t.id,
+    pipeline_id: t.pipelineId,
+    enabled: t.enabled,
+    type: t.type,
+    name: t.name,
+    schedule: t.schedule ?? null,
+    webhook: t.webhook ?? null,
+    upstream_pipeline_id: t.upstreamPipelineId ?? null,
+    default_inputs: t.defaultInputs,
+    last_fired_at: t.lastFiredAt ?? null,
+    last_status: t.lastStatus ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export async function listTriggers(pipelineId?: string): Promise<Trigger[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  let q = sb.from("triggers").select("*").order("created_at", { ascending: false });
+  if (pipelineId) q = q.eq("pipeline_id", pipelineId);
+  const { data, error } = await q;
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).flatMap((r) => {
+    const t = rowToTrigger(r);
+    return t ? [t] : [];
+  });
+}
+
+export async function upsertTrigger(t: Trigger): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("triggers").upsert(triggerToRow(t), { onConflict: "id" });
+  return !error;
+}
+
+export async function deleteTrigger(id: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("triggers").delete().eq("id", id);
   return !error;
 }
 

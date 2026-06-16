@@ -33,9 +33,11 @@ import { hasSupabase } from "@/lib/supabase/client";
 import {
   deleteDataset,
   deleteLibraryAsset,
+  deleteTrigger,
   getBuilderPreferences,
   listDatasets,
   listLibraryAssets,
+  listTriggers,
   saveBuilderPreferences,
   saveDataset,
   saveExport,
@@ -43,10 +45,12 @@ import {
   saveRun,
   saveTake,
   upsertPipeline,
+  upsertTrigger,
 } from "@/lib/supabase/queries";
 import { emptyPreferences, type BuilderPreferences } from "@/lib/preferences/schema";
 import { learnFromAppliedChanges } from "@/lib/preferences/learn";
 import { libraryAssetSchema, type LibraryAsset, type LibraryKind } from "@/lib/library/schema";
+import { type Trigger } from "@/lib/automation/schema";
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
 import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
@@ -156,6 +160,10 @@ interface PipelineState {
   /** Sharing — the share modal (View / Run / Edit + Run-App link). */
   shareOpen: boolean;
 
+  /** Automation — triggers (schedule / webhook / pipeline) + the Triggers modal. */
+  triggers: Trigger[];
+  triggersOpen: boolean;
+
   /** Export system */
   exportOpen: boolean;
   exporting: boolean;
@@ -262,6 +270,14 @@ interface PipelineState {
   closeShare: () => void;
   openExport: () => void;
   closeExport: () => void;
+
+  /** Automation */
+  openTriggers: () => void;
+  closeTriggers: () => void;
+  hydrateTriggers: () => Promise<void>;
+  saveTrigger: (trigger: Trigger) => Promise<void>;
+  removeTrigger: (id: string) => Promise<void>;
+  toggleTrigger: (id: string) => Promise<void>;
   openUpgrade: (gate: FeatureGateResult & { title?: string }) => void;
   closeUpgrade: () => void;
   runExport: (modes: ExportMode[]) => Promise<void>;
@@ -384,6 +400,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     clarify: null,
     libraryAssets: [],
     shareOpen: false,
+    triggers: [],
+    triggersOpen: false,
     exportOpen: false,
     exporting: false,
     exportHealth: null,
@@ -1170,6 +1188,35 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
 
     openShare: () => set({ shareOpen: true }),
     closeShare: () => set({ shareOpen: false }),
+
+    openTriggers: () => set({ triggersOpen: true }),
+    closeTriggers: () => set({ triggersOpen: false }),
+
+    hydrateTriggers: async () => {
+      const p = get().pipeline;
+      if (!p) return;
+      const triggers = hasSupabase() ? await listTriggers(p.id) : [];
+      set({ triggers });
+    },
+
+    saveTrigger: async (trigger) => {
+      set((s) => ({ triggers: [trigger, ...s.triggers.filter((t) => t.id !== trigger.id)] }));
+      if (hasSupabase()) await upsertTrigger(trigger);
+      set({ notice: "Trigger saved." });
+    },
+
+    removeTrigger: async (id) => {
+      set((s) => ({ triggers: s.triggers.filter((t) => t.id !== id) }));
+      if (hasSupabase()) await deleteTrigger(id);
+    },
+
+    toggleTrigger: async (id) => {
+      const t = get().triggers.find((x) => x.id === id);
+      if (!t) return;
+      const next: Trigger = { ...t, enabled: !t.enabled, updatedAt: new Date().toISOString() };
+      set((s) => ({ triggers: s.triggers.map((x) => (x.id === id ? next : x)) }));
+      if (hasSupabase()) await upsertTrigger(next);
+    },
 
     openUpgrade: (gate) => set({ upgradeGate: gate }),
     closeUpgrade: () => set({ upgradeGate: null }),

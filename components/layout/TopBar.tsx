@@ -15,6 +15,7 @@ import {
   Share2,
   TriangleAlert,
   UserPlus,
+  Zap,
 } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { CreditEstimate } from "@/components/billing/CreditEstimate";
@@ -34,6 +35,7 @@ export function TopBar() {
   const setExecutionMode = usePipelineStore((s) => s.setExecutionMode);
   const openExport = usePipelineStore((s) => s.openExport);
   const openShare = usePipelineStore((s) => s.openShare);
+  const openTriggers = usePipelineStore((s) => s.openTriggers);
 
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -252,6 +254,16 @@ export function TopBar() {
           className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-dim transition hover:bg-white/5 hover:text-ink"
         >
           <PanelRight size={16} />
+        </button>
+
+        <button
+          type="button"
+          onClick={openTriggers}
+          disabled={!pipeline}
+          title="Automate — schedule, webhook, or pipeline-to-pipeline triggers"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-dim transition hover:bg-white/5 hover:text-ink disabled:opacity-50"
+        >
+          <Zap size={16} />
         </button>
 
         <button
