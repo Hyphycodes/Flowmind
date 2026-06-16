@@ -36,7 +36,7 @@ export function computeFieldChanges(
 
 /** Packet-loss warnings: fields present upstream that silently vanished
  *  (not carried, not explicitly compressed or dropped). Essential for debugging
- *  complex Jarvis-like systems. */
+ *  complex multi-team systems. */
 export function detectPacketLoss(upstreamFieldKeys: string[], packet: HandoffPacket): string[] {
   const carried = new Set(Object.keys(packet.keyFields));
   const declared = new Set([...packet.fieldChanges.compressed, ...packet.fieldChanges.dropped]);

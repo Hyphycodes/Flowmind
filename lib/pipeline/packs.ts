@@ -12,18 +12,11 @@ export type TemplatePack = {
 
 export const PACKS: TemplatePack[] = [
   {
-    id: "pack-jarvis",
-    label: "Jarvis Pack",
-    purpose: "Personal operating assistants — taste, planning, and recommendations.",
+    id: "pack-research-crew",
+    label: "Research Crew Pack",
+    purpose: "Multi-team research systems — source, weigh, score, and synthesize.",
     accent: "violet",
-    templateIds: ["tpl-jarvis", "tpl-meal"],
-  },
-  {
-    id: "pack-real-estate",
-    label: "Real Estate Pack",
-    purpose: "Investor, wholesaling, and deal-analysis systems.",
-    accent: "gold",
-    templateIds: ["tpl-real-estate"],
+    templateIds: ["tpl-research-crew", "tpl-meal"],
   },
   {
     id: "pack-content",

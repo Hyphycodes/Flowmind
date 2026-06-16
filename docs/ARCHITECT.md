@@ -139,7 +139,7 @@ A good smoke test for the Architect: it should cleanly **regenerate the built-in
 one-line description — same rough shape, valid graph, sensible output fields. Try each
 (`lib/pipeline/fixtures.ts`):
 
-- **Real Estate Deal Analyzer** — "Analyze a property address into comps, ARV, repair estimate, a deal score, and a max offer."
+- **Research Intelligence Crew** — "Spin up a research crew that sources, weighs, scores, and synthesizes an executive brief on a market question."
 - **Content Repurposer** — "Turn one long post into hooks, short-form scripts, and platform captions."
 - **Inbox Assistant** — "Triage my inbox, prioritize messages, and draft replies for approval."
 - **Market Research Engine** — "Research a market: gather sources, score credibility, extract findings, write a thesis."

@@ -190,4 +190,4 @@ Coordinator produces are correct and stable today; richer per-strategy execution
 changing the team's external contract.
 
 See also: `docs/ARCHITECT.md` (how teams get generated, Prompt 01), `docs/ARCHITECTURE.md`
-(system map), `docs/TEMPLATE_PACKS.md` (Jarvis / Meal / Outfit teams in `lib/pipeline/teamFixtures.ts`).
+(system map), `docs/TEMPLATE_PACKS.md` (Research Crew / Meal / Outfit teams in `lib/pipeline/teamFixtures.ts`).

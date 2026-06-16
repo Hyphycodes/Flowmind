@@ -170,13 +170,13 @@ Key concepts:
   `handoff-packets.json`, `ui-bindings.json`, `env.example`, a **Client Blueprint**, and a
   **Founder Brief**.
 
-Flagship fixture: **Jarvis Places Radar** — Source → Taste → Ranking → Planning → Composer
-teams with real handoff packets, three sample Takes, and a recommendation-card UI surface.
-This is why Flowmind exists.
+Flagship fixture: **Research Intelligence Crew** — Source → Analysis → Scoring → Synthesis →
+Composer teams with real handoff packets, three sample Takes, and a recommendation-card UI
+surface. This is why Flowmind exists.
 
 ## Template packs
 
-Templates are grouped into preset **packs** (`lib/pipeline/packs.ts`): Jarvis, Real Estate,
+Templates are grouped into preset **packs** (`lib/pipeline/packs.ts`): Research Crew,
 Content Studio, Inbox Operator, Research Analyst, Sales Agent, and AI Stylist. The Templates
 page groups cards by pack with node/team/agent/table counts and a readiness score.
 

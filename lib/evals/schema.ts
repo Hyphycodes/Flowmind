@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Evaluator / Judge dimensions. Includes generic quality dims + Jarvis-style custom dims. */
+/** Evaluator / Judge dimensions. Includes generic quality dims + domain-specific custom dims. */
 export const EVAL_DIMENSIONS = [
   // generic
   "correctness",
@@ -12,15 +12,15 @@ export const EVAL_DIMENSIONS = [
   "cost_speed",
   "policy",
   "user_fit",
-  // Jarvis-style custom
-  "taste_match",
-  "vibe_match",
-  "corny_risk",
+  // domain-specific custom
+  "relevance_match",
+  "credibility_match",
+  "bias_risk",
   "actionability",
-  "location_fit",
-  "budget_fit",
+  "recency",
+  "coverage",
   "freshness",
-  "luxury_level",
+  "rigor",
 ] as const;
 export type EvalDimension = (typeof EVAL_DIMENSIONS)[number];
 

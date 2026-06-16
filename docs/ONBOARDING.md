@@ -5,9 +5,9 @@ Kept short — three steps, no tooltip spam.
 
 1. **Welcome** — one sentence + the three things Flowmind creates (agent teams, generated
    data, preview/export).
-2. **Pick a use case** — cards mapped to templates: AI Agent System / Personal Assistant →
-   Jarvis, Real Estate, Content Studio, Inbox Operator, Research Engine, Sales Agent, Custom
-   (blank).
+2. **Pick a use case** — cards mapped to templates: AI Agent System / Research Crew →
+   Research Crew, Meal Curator, Content Studio, Inbox Operator, Research Engine, Sales Agent,
+   Custom (blank).
 3. **Choose a start** — Use demo / Input Studio data (recommended, no keys), Connect Google
    Drive (optional, clearly separate from sign-in), or Start blank.
 

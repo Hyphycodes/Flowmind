@@ -20,7 +20,6 @@ const RAW: unknown[] = [
     testable: true,
     mockable: true,
     fallbackSourceMode: "input_studio",
-    fallbackDatasetId: "ds-places-seed",
     liveHandler: { type: "provider_sdk" },
   },
   {

@@ -12,8 +12,7 @@ function layerOf(n: PipelineNode): "source" | "brain" | "surface" {
 }
 
 const CATEGORY_HINTS: [RegExp, string, string][] = [
-  [/jarvis|place|dinner|restaurant|night.?out|radar|concierge/i, "Lifestyle Concierge", "Jarvis Pack"],
-  [/real estate|property|\bdeal\b|\barv\b|\bcomps\b|rehab|wholesal/i, "Real Estate Intelligence", "Real Estate Pack"],
+  [/crew|council|team|synthesis|source.?team|multi.?agent/i, "Research Intelligence Crew", "Research Crew Pack"],
   [/content|hook|caption|post|video|script/i, "Content Studio", "Content Studio Pack"],
   [/inbox|email|reply|triage|message/i, "Inbox Operator", "Inbox Operator Pack"],
   [/research|market|competitor|thesis|report/i, "Research Analyst", "Research Analyst Pack"],

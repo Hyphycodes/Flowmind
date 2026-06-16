@@ -8,268 +8,15 @@ import {
 } from "./schema";
 import type { Dataset } from "@/lib/datasets/schema";
 import { newId } from "./validate";
-import { JARVIS_PLACES_DATASET, TEAM_TEMPLATES } from "./teamFixtures";
+import { RESEARCH_SOURCES_DATASET, TEAM_TEMPLATES } from "./teamFixtures";
 
 /** Reusable Seed Datasets bundled with the app (shown in the Dataset Library). */
-export const FIXTURE_DATASETS: Dataset[] = [JARVIS_PLACES_DATASET];
+export const FIXTURE_DATASETS: Dataset[] = [RESEARCH_SOURCES_DATASET];
 
 const P = (raw: unknown): Pipeline => pipelineSchema.parse(raw);
 const R = (raw: unknown): RunTrace => runTraceSchema.parse(raw);
 
 const ISO = (min: number) => new Date(Date.now() - min * 60000).toISOString();
-
-/* ───────────────────────── Real Estate Deal Analyzer ───────────────────────── */
-
-const RE_TABLES: OutputTable[] = [
-  {
-    id: "comps",
-    name: "comps",
-    sourceNodeId: "comp-finder",
-    description: "Comparable recent sales near the subject property.",
-    columns: [
-      { key: "address", label: "Address", type: "text" },
-      { key: "beds", label: "Beds", type: "number" },
-      { key: "baths", label: "Baths", type: "number" },
-      { key: "sqft", label: "Sq Ft", type: "number" },
-      { key: "sold_price", label: "Sold", type: "currency" },
-      { key: "sold_date", label: "Date", type: "date" },
-      { key: "dist", label: "Dist.", type: "text" },
-    ],
-    rows: [
-      { address: "1719 W Mariposa St", beds: 3, baths: 2, sqft: 1450, sold_price: 283500, sold_date: "2026-05-15", dist: "0.3 mi" },
-      { address: "1512 W Berridge Ln", beds: 3, baths: 2, sqft: 1480, sold_price: 289000, sold_date: "2026-04-18", dist: "0.4 mi" },
-      { address: "1604 W Glenrosa Ave", beds: 3, baths: 1.75, sqft: 1395, sold_price: 274000, sold_date: "2026-05-02", dist: "0.7 mi" },
-      { address: "1338 W Hazelwood St", beds: 3, baths: 2, sqft: 1520, sold_price: 296500, sold_date: "2026-03-29", dist: "0.6 mi" },
-      { address: "1247 W Campbell Ave", beds: 4, baths: 2, sqft: 1610, sold_price: 305000, sold_date: "2026-04-05", dist: "0.9 mi" },
-    ],
-  },
-  {
-    id: "arv_estimate",
-    name: "arv_estimate",
-    sourceNodeId: "arv-estimator",
-    description: "After-Repair Value range from comps + condition.",
-    columns: [
-      { key: "estimate", label: "Estimate", type: "text" },
-      { key: "low", label: "Low", type: "currency" },
-      { key: "expected", label: "Expected", type: "currency" },
-      { key: "high", label: "High", type: "currency" },
-      { key: "confidence", label: "Confidence", type: "badge" },
-    ],
-    rows: [
-      { estimate: "After-Repair Value", low: 272000, expected: 285000, high: 298000, confidence: "High" },
-    ],
-  },
-  {
-    id: "repair_costs",
-    name: "repair_costs",
-    sourceNodeId: "repair-estimator",
-    description: "Line-item rehab budget at market rates.",
-    columns: [
-      { key: "category", label: "Category", type: "text" },
-      { key: "scope", label: "Scope", type: "text" },
-      { key: "cost", label: "Cost", type: "currency" },
-    ],
-    rows: [
-      { category: "Roof", scope: "Partial tear-off + patch", cost: 7800 },
-      { category: "Kitchen", scope: "Cabinets, counters, appliances", cost: 12400 },
-      { category: "Bathrooms", scope: "2 full remodels", cost: 8200 },
-      { category: "Flooring", scope: "LVP throughout 1,450 sqft", cost: 6100 },
-      { category: "Interior Paint", scope: "Walls, trim, ceilings", cost: 3400 },
-      { category: "HVAC", scope: "Service + new condenser", cost: 4300 },
-      { category: "Landscaping", scope: "Front + back cleanup", cost: 2350 },
-      { category: "Contingency", scope: "10% buffer", cost: 4200 },
-    ],
-  },
-  {
-    id: "deal_score",
-    name: "deal_score",
-    sourceNodeId: "deal-scorer",
-    description: "Composite score, grade, and max allowable offer.",
-    columns: [
-      { key: "grade", label: "Grade", type: "badge" },
-      { key: "score", label: "Score", type: "text" },
-      { key: "max_offer", label: "Max Offer", type: "currency" },
-      { key: "margin", label: "Margin", type: "currency" },
-      { key: "recommendation", label: "Call", type: "badge" },
-    ],
-    rows: [
-      { grade: "A-", score: "82 / 100", max_offer: 172500, margin: 63750, recommendation: "Pursue" },
-    ],
-  },
-  {
-    id: "buyer_pitch",
-    name: "buyer_pitch",
-    sourceNodeId: "buyer-pitch",
-    description: "One-paragraph pitch for the dispo board.",
-    columns: [
-      { key: "headline", label: "Headline", type: "text" },
-      { key: "summary", label: "Summary", type: "text" },
-    ],
-    rows: [
-      {
-        headline: "Turn-key value-add in a tightening Phoenix submarket",
-        summary:
-          "3/2 in 85015 with strong comps within 0.5 mi. $48.7k cosmetic-to-moderate rehab unlocks a $285k ARV. At a $172.5k max offer the deal holds a $63.7k margin with ~$1,250/mo cash-flow potential as a rental exit.",
-      },
-    ],
-  },
-  {
-    id: "deal_summary",
-    name: "deal_summary",
-    sourceNodeId: "deal-scorer",
-    description: "Headline numbers wired to the UI preview.",
-    columns: [
-      { key: "arv", label: "ARV", type: "currency" },
-      { key: "repairs", label: "Repairs", type: "currency" },
-      { key: "max_offer", label: "Max Offer", type: "currency" },
-      { key: "cash_flow", label: "Cash Flow", type: "text" },
-      { key: "score", label: "Score", type: "badge" },
-    ],
-    rows: [
-      { arv: 285000, repairs: 48750, max_offer: 172500, cash_flow: "$1,250/mo", score: "A- (82/100)" },
-    ],
-  },
-];
-
-export const realEstatePipeline = P({
-  id: "tpl-real-estate",
-  name: "Real Estate Deal Analyzer",
-  description:
-    "Analyzes a property deal from address to comp analysis, ARV, repair estimate, deal score, and buyer pitch.",
-  nodes: [
-    {
-      id: "input",
-      type: "input",
-      title: "Input",
-      subtitle: "Property Details",
-      description: "Collects the property address and basic details.",
-      color: "blue",
-      outputs: ["property_info"],
-      position: { x: 40, y: 320 },
-    },
-    {
-      id: "comp-finder",
-      type: "agent",
-      title: "Comp Finder",
-      subtitle: "Find comparable properties",
-      description: "Find comparable properties and return the 3–5 best matches.",
-      role: "Real estate comparables analyst",
-      prompt:
-        "You are a real estate comps analyst. Given the subject property, return 3–5 of the best comparable recent sales. For each comp include address, beds, baths, sqft, sold_price, sold_date, and distance. Prefer sales within ~1 mile and the last 6 months and similar size/condition.",
-      color: "teal",
-      inputs: ["property_info"],
-      outputs: ["comps"],
-      position: { x: 330, y: 300 },
-    },
-    {
-      id: "arv-estimator",
-      type: "agent",
-      title: "ARV Estimator",
-      subtitle: "Estimate After-Repair Value",
-      description: "Estimate After-Repair Value based on comps and property condition.",
-      role: "Valuation analyst",
-      prompt:
-        "You are a valuation analyst. Using the comparable sales, estimate the After-Repair Value (ARV) of the subject property as a low / expected / high range with a confidence level. Reconcile $/sqft against the comps and note the basis.",
-      color: "violet",
-      inputs: ["comps", "property_info"],
-      outputs: ["arv_estimate"],
-      position: { x: 620, y: 330 },
-    },
-    {
-      id: "repair-estimator",
-      type: "agent",
-      title: "Repair Estimator",
-      subtitle: "Estimate repair costs",
-      description: "Estimate repair costs based on property scope and market rates.",
-      role: "Rehab estimator",
-      prompt:
-        "You are a rehab estimator. Produce a line-item repair budget (category, scope, cost) for a cosmetic-to-moderate flip at current market labor + material rates, including a contingency line. Keep the total realistic for the property size.",
-      color: "orange",
-      inputs: ["arv_estimate", "property_info"],
-      outputs: ["repair_costs"],
-      position: { x: 840, y: 110 },
-    },
-    {
-      id: "deal-scorer",
-      type: "evaluator",
-      title: "Deal Scorer",
-      subtitle: "Score the deal",
-      description: "Score the deal based on metrics and thresholds.",
-      role: "Acquisitions underwriter",
-      prompt:
-        "You are an acquisitions underwriter. Given ARV and repair costs, compute a max allowable offer (≈70% ARV − repairs), the resulting margin, a 0–100 deal score with a letter grade, and a pursue/pass recommendation. Also emit a compact deal_summary row (arv, repairs, max_offer, cash_flow, score).",
-      color: "gold",
-      inputs: ["arv_estimate", "repair_costs"],
-      outputs: ["deal_score", "deal_summary"],
-      position: { x: 1030, y: 330 },
-    },
-    {
-      id: "buyer-pitch",
-      type: "output",
-      title: "Buyer Pitch Generator",
-      subtitle: "Generate buyer pitch",
-      description: "Generate a compelling buyer pitch with deal summary and highlights.",
-      role: "Dispositions copywriter",
-      prompt:
-        "You are a dispositions copywriter. Write a tight, confident one-paragraph buyer pitch using the deal summary — lead with the opportunity, cite ARV, rehab, max offer, margin, and cash-flow, and close with the exit. Return a headline and summary.",
-      color: "pink",
-      inputs: ["deal_summary"],
-      outputs: ["buyer_pitch"],
-      position: { x: 840, y: 560 },
-    },
-  ],
-  edges: [
-    { id: "e1", source: "input", target: "comp-finder", dataKey: "property_info", animated: false },
-    { id: "e2", source: "comp-finder", target: "arv-estimator", dataKey: "comps", animated: false },
-    { id: "e3", source: "arv-estimator", target: "repair-estimator", dataKey: "arv_estimate", animated: false },
-    { id: "e4", source: "arv-estimator", target: "deal-scorer", dataKey: "arv_estimate", animated: false },
-    { id: "e5", source: "repair-estimator", target: "deal-scorer", dataKey: "repair_costs", animated: false },
-    { id: "e6", source: "deal-scorer", target: "buyer-pitch", dataKey: "deal_summary", label: "deal_summary", animated: false },
-  ],
-  mockInputs: [
-    { key: "address", label: "Property Address", value: "1429 W Mariposa St" },
-    { key: "city", label: "City", value: "Phoenix" },
-    { key: "state", label: "State", value: "AZ" },
-    { key: "zip", label: "ZIP", value: "85015" },
-    { key: "propertyType", label: "Property Type", value: "Single Family" },
-  ],
-  outputTables: RE_TABLES,
-  uiBindings: [
-    { id: "b-score", tableId: "deal_score", componentType: "scoreCard", title: "Deal Score", position: 0, fields: ["grade", "score", "recommendation"] },
-    { id: "b-metrics", tableId: "deal_summary", componentType: "metricCards", title: "Key Numbers", position: 1, fields: ["arv", "repairs", "max_offer", "cash_flow"] },
-    { id: "b-comps", tableId: "comps", componentType: "recordList", title: "Comparable Sales", position: 2, fields: ["address", "sold_price", "sqft", "sold_date"] },
-    { id: "b-pitch", tableId: "buyer_pitch", componentType: "summaryCard", title: "Buyer Pitch", position: 3, fields: ["headline", "summary"] },
-  ],
-});
-
-const realEstateRun = R({
-  id: "run-real-estate-example",
-  pipelineId: "tpl-real-estate",
-  status: "success",
-  startedAt: ISO(3),
-  finishedAt: ISO(2),
-  steps: [
-    { nodeId: "input", title: "Input", status: "success", durationMs: 120, summary: "Loaded 1429 W Mariposa St, Phoenix AZ 85015." },
-    { nodeId: "comp-finder", title: "Comp Finder", status: "success", durationMs: 2140, summary: "Found 5 comps within 0.9 mi, last 60 days." },
-    { nodeId: "arv-estimator", title: "ARV Estimator", status: "success", durationMs: 1760, summary: "ARV ≈ $285,000 (high confidence)." },
-    { nodeId: "repair-estimator", title: "Repair Estimator", status: "success", durationMs: 1980, summary: "Rehab budget $48,750 across 8 line items." },
-    { nodeId: "deal-scorer", title: "Deal Scorer", status: "success", durationMs: 980, summary: "Score 82 (A-), max offer $172,500." },
-    { nodeId: "buyer-pitch", title: "Buyer Pitch Generator", status: "success", durationMs: 1520, summary: "Drafted dispo-ready buyer pitch." },
-  ],
-  tables: RE_TABLES,
-  finalOutput: {
-    title: "Buyer Pitch",
-    summary:
-      "This value-add opportunity in Phoenix, AZ offers strong returns with manageable repair costs. With an ARV of $285,000 and total estimated costs of $172,500, the deal scores an A- with solid cash flow potential.",
-    highlights: [
-      { label: "ARV", value: "$285,000", accent: "violet" },
-      { label: "Repair Costs", value: "$48,750", accent: "orange" },
-      { label: "Max Offer", value: "$172,500", accent: "green" },
-      { label: "Cash Flow (Est.)", value: "$1,250/mo", accent: "teal" },
-      { label: "Deal Score", value: "A- (82/100)", accent: "gold" },
-    ],
-  },
-});
 
 /* ───────────────────────────── Content Repurposer ──────────────────────────── */
 
@@ -761,14 +508,6 @@ export type Template = {
 
 export const TEMPLATES: Template[] = [
   {
-    id: "tpl-real-estate",
-    label: "Real Estate Deal Analyzer",
-    blurb: "Address → comps → ARV → repairs → score → buyer pitch.",
-    keywords: ["real estate", "property", "arv", "deal", "comps", "wholesale", "rehab", "house", "flip", "rent"],
-    pipeline: realEstatePipeline,
-    exampleRun: realEstateRun,
-  },
-  {
     id: "tpl-content",
     label: "Content Repurposer",
     blurb: "One idea → hooks, scripts, captions, posting plan.",
@@ -810,7 +549,8 @@ export function getTemplate(id: string): Template | undefined {
 /** Deterministic keyword routing used as the offline / fallback generator. */
 export function matchTemplate(description: string): Template {
   const d = description.toLowerCase();
-  let best: Template = TEMPLATES[3]; // research = generic default
+  // research = generic default fallback
+  let best: Template = TEMPLATES.find((t) => t.id === "tpl-research") ?? TEMPLATES[0];
   let bestScore = 0;
   for (const t of TEMPLATES) {
     const score = t.keywords.reduce((s, k) => (d.includes(k) ? s + 1 : s), 0);

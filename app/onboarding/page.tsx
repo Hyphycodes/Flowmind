@@ -17,9 +17,9 @@ import { cn } from "@/lib/ui/cn";
 type UseCase = { id: string; label: string; desc: string; template: string; accent: Accent };
 
 const USE_CASES: UseCase[] = [
-  { id: "agent_system", label: "AI Agent System", desc: "Teams of agents that hand off work.", template: "tpl-jarvis", accent: "violet" },
-  { id: "assistant", label: "Personal Assistant", desc: "Taste-aware planning + recommendations.", template: "tpl-jarvis", accent: "violet" },
-  { id: "real_estate", label: "Real Estate Deal Analyzer", desc: "Comps, ARV, repairs, deal score.", template: "tpl-real-estate", accent: "gold" },
+  { id: "agent_system", label: "AI Agent System", desc: "Teams of agents that hand off work.", template: "tpl-research-crew", accent: "violet" },
+  { id: "research_crew", label: "Research Crew", desc: "Source, weigh, score, synthesize a brief.", template: "tpl-research-crew", accent: "violet" },
+  { id: "meal", label: "Meal Curator", desc: "Recipes, weekly plan, shopping list.", template: "tpl-meal", accent: "gold" },
   { id: "content", label: "Content Studio", desc: "Hooks, scripts, captions, posting plan.", template: "tpl-content", accent: "pink" },
   { id: "inbox", label: "Inbox Operator", desc: "Triage, draft, schedule, approve.", template: "tpl-inbox", accent: "cyan" },
   { id: "research", label: "Research Engine", desc: "Sources, credibility, thesis report.", template: "tpl-research", accent: "teal" },

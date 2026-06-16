@@ -97,10 +97,10 @@ export function Builder() {
         }
       }
 
-      const realEstate = getTemplate("tpl-real-estate")!;
+      const starter = getTemplate("tpl-research-crew")!;
 
       if (!hasSupabase()) {
-        setActivePipeline(instantiatePipeline(realEstate.pipeline), realEstate.exampleRun);
+        setActivePipeline(instantiatePipeline(starter.pipeline), starter.exampleRun);
         setLoading(false);
         return;
       }
@@ -108,9 +108,9 @@ export function Builder() {
       try {
         const list = await listPipelines();
         if (list.length === 0) {
-          const p = instantiatePipeline(realEstate.pipeline);
+          const p = instantiatePipeline(starter.pipeline);
           await upsertPipeline(p);
-          const exampleRun = { ...realEstate.exampleRun, id: newId("run"), pipelineId: p.id };
+          const exampleRun = { ...starter.exampleRun, id: newId("run"), pipelineId: p.id };
           await saveRun(exampleRun);
           setActivePipeline(p, exampleRun);
         } else {
@@ -119,11 +119,11 @@ export function Builder() {
             const run = await getLatestRun(p.id);
             setActivePipeline(p, run);
           } else {
-            setActivePipeline(instantiatePipeline(realEstate.pipeline), realEstate.exampleRun);
+            setActivePipeline(instantiatePipeline(starter.pipeline), starter.exampleRun);
           }
         }
       } catch {
-        setActivePipeline(instantiatePipeline(realEstate.pipeline), realEstate.exampleRun);
+        setActivePipeline(instantiatePipeline(starter.pipeline), starter.exampleRun);
       }
       setLoading(false);
     })();
@@ -169,8 +169,8 @@ function CanvasLoading() {
 }
 
 const FIRST_RUN_IDEAS = [
-  "Jarvis-style recommendation engine",
-  "Real estate deal analyzer",
+  "Research intelligence crew",
+  "Competitive analysis engine",
   "Content repurposing studio",
   "Inbox triage assistant",
   "Sales lead qualifier",
@@ -207,10 +207,10 @@ function EmptyCanvas() {
 
         <div className="mt-5 flex items-center justify-center gap-2 text-[12px]">
           <Link
-            href="/editor?template=tpl-jarvis"
+            href="/editor?template=tpl-research-crew"
             className="flex items-center gap-1.5 rounded-lg bg-violet px-3 py-1.5 font-medium text-white transition hover:bg-violet/90"
           >
-            <Sparkles size={13} /> Open the Jarvis demo
+            <Sparkles size={13} /> Open the research crew demo
           </Link>
           <Link
             href="/templates"

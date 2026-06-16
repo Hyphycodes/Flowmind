@@ -8,8 +8,8 @@ import { EFFORT_LEVELS, EFFORT_HINTS, EFFORT_LABELS } from "@/lib/pipeline/effor
 import { getRemixAction } from "@/lib/product/remix";
 
 const CHIPS = [
-  "Jarvis-style recommendation engine",
-  "Real estate deal analyzer",
+  "Research intelligence crew",
+  "Competitive analysis engine",
   "Content repurposer",
   "Inbox triage assistant",
   "Sales lead qualifier",

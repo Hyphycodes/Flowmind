@@ -63,13 +63,13 @@ function clamp(n: number): number {
 
 function scoreDimension(dim: string, ctx: EvalCtx): EvalScore {
   const conf = ctx.teamConfidence * 100;
-  // 1) direct numeric column match (e.g. taste_match, vibe_match, budget_fit)
+  // 1) direct numeric column match (e.g. relevance_match, credibility_match, coverage)
   const col = columnAverage(ctx.tables, dim);
   if (col != null) return { dimension: dim, score: clamp(col), notes: "from output table" };
 
   // 2) risk-style dims
-  if (/risk|corny/.test(dim)) {
-    const risk = riskAverage(ctx.tables, dim) ?? riskAverage(ctx.tables, "corny_risk");
+  if (/risk/.test(dim)) {
+    const risk = riskAverage(ctx.tables, dim) ?? riskAverage(ctx.tables, "bias_risk");
     if (risk != null) return { dimension: dim, score: clamp(risk), notes: "inverted risk" };
   }
 
@@ -86,12 +86,12 @@ function scoreDimension(dim: string, ctx: EvalCtx): EvalScore {
     case "relevance":
     case "user_fit":
     case "actionability":
-    case "location_fit":
-    case "budget_fit":
+    case "recency":
+    case "coverage":
       return { dimension: dim, score: clamp((conf + ctx.completeness) / 2 - warnPenalty) };
     case "freshness":
       return { dimension: dim, score: clamp(conf - warnPenalty * 0.5) };
-    case "luxury_level":
+    case "rigor":
     case "style":
       return { dimension: dim, score: clamp(conf * 0.9 + 10) };
     case "cost_speed":
