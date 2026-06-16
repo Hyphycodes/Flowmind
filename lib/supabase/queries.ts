@@ -9,7 +9,7 @@ import {
 import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { builderPreferencesSchema, PREFERENCES_ID, type BuilderPreferences } from "@/lib/preferences/schema";
 import { libraryAssetSchema, type LibraryAsset } from "@/lib/library/schema";
-import { pipelineShareSchema, type PipelineShare } from "@/lib/sharing/schema";
+import { pipelineShareSchema, shareRunSchema, type PipelineShare, type ShareRun } from "@/lib/sharing/schema";
 import { triggerSchema, triggerRunSchema, type Trigger, type TriggerRun } from "@/lib/automation/schema";
 import type { ExportManifest } from "@/lib/export/schema";
 import { getSupabase } from "./client";
@@ -539,6 +539,37 @@ export async function deleteShare(id: string): Promise<boolean> {
   if (!sb) return false;
   const { error } = await sb.from("pipeline_shares").delete().eq("id", id);
   return !error;
+}
+
+export async function listShareRuns(shareId: string): Promise<ShareRun[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("share_runs")
+    .select("*")
+    .eq("share_id", shareId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).flatMap((r) => {
+    try {
+      return [
+        shareRunSchema.parse({
+          id: r.id,
+          shareId: r.share_id,
+          requesterRef: (r.requester_ref as string | null) ?? undefined,
+          status: r.status ?? "unknown",
+          durationMs: (r.duration_ms as number | null) ?? undefined,
+          costUsd: (r.cost_usd as number | null) ?? undefined,
+          inputKeys: (r.input_keys as string[] | null) ?? [],
+          runId: (r.run_id as string | null) ?? undefined,
+          createdAt: r.created_at ?? new Date().toISOString(),
+        }),
+      ];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /* ── Triggers (automation) ───────────────────────────────────────────── */

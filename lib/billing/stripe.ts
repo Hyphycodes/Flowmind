@@ -76,6 +76,37 @@ export async function createCheckoutSession(input: {
   });
 }
 
+/** Task 05b — a dynamic-price checkout for a Run-App share (per-run payment or a monthly
+ *  subscription). Uses inline `price_data` so the owner can set an arbitrary amount. The requester
+ *  needs no Flowmind account (customer_email). Metadata carries the share + hashed requester so the
+ *  webhook can mint the entitlement. */
+export async function createShareCheckoutSession(input: {
+  amountUsd: number;
+  currency: string;
+  mode: "per_run" | "subscription";
+  customerEmail?: string;
+  successUrl: string;
+  cancelUrl: string;
+  productName: string;
+  metadata: Record<string, string>;
+}): Promise<{ id: string; url: string | null }> {
+  const priceData: Record<string, unknown> = {
+    currency: input.currency || "usd",
+    unit_amount: Math.round(input.amountUsd * 100),
+    product_data: { name: input.productName },
+  };
+  if (input.mode === "subscription") priceData.recurring = { interval: "month" };
+  return stripeFetch<{ id: string; url: string | null }>("/checkout/sessions", {
+    mode: input.mode === "subscription" ? "subscription" : "payment",
+    success_url: input.successUrl,
+    cancel_url: input.cancelUrl,
+    customer_email: input.customerEmail,
+    line_items: [{ price_data: priceData, quantity: 1 }],
+    metadata: input.metadata,
+    subscription_data: input.mode === "subscription" ? { metadata: input.metadata } : undefined,
+  });
+}
+
 export async function createPortalSession(input: { customerId: string; returnUrl: string }): Promise<{ url: string }> {
   return stripeFetch<{ url: string }>("/billing_portal/sessions", {
     customer: input.customerId,

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Loader2, Play } from "lucide-react";
+import { ArrowRight, Loader2, Lock, Play } from "lucide-react";
 import type { RunAppManifest } from "@/lib/sharing/manifest";
 import type { FinalOutput, OutputTable } from "@/lib/pipeline/schema";
 import { formatCell } from "@/lib/ui/format";
@@ -16,19 +16,32 @@ export function RunAppClient({ manifest, token }: { manifest: RunAppManifest; to
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ finalOutput?: FinalOutput; tables: OutputTable[] } | null>(null);
+  const [email, setEmail] = useState("");
+  const [paywall, setPaywall] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const paidJustNow = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("paid");
 
   const canRun = manifest.level === "run" || manifest.level === "edit";
+  const priced = manifest.pricing && manifest.pricing.mode !== "free";
+  const priceLabel = manifest.pricing
+    ? `$${manifest.pricing.amountUsd}${manifest.pricing.mode === "subscription" ? "/mo" : " per run"}`
+    : "";
 
   const run = async () => {
     setRunning(true);
     setError(null);
+    setPaywall(false);
     try {
       const res = await fetch(`/api/run-app/${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inputs: values }),
+        body: JSON.stringify({ inputs: values, requesterEmail: email || undefined }),
       });
       const j = await res.json().catch(() => ({}));
+      if (res.status === 402 && j.paywall) {
+        setPaywall(true);
+        return;
+      }
       if (!res.ok) {
         setError(j.error ?? "Run failed.");
         return;
@@ -41,6 +54,32 @@ export function RunAppClient({ manifest, token }: { manifest: RunAppManifest; to
     }
   };
 
+  const pay = async () => {
+    if (!email.trim() || !/\S+@\S+/.test(email)) {
+      setError("Enter your email to continue.");
+      return;
+    }
+    setPaying(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/run-app/${encodeURIComponent(token)}/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requesterEmail: email }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.url) {
+        window.location.href = j.url as string;
+        return;
+      }
+      setError(j.error ?? "Couldn't start checkout.");
+    } catch (e) {
+      setError((e as Error)?.message ?? "Couldn't start checkout.");
+    } finally {
+      setPaying(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#07070c] px-5 py-10 text-ink">
       <div className="mx-auto w-full max-w-xl">
@@ -49,7 +88,12 @@ export function RunAppClient({ manifest, token }: { manifest: RunAppManifest; to
             <h1 className="text-[20px] font-semibold leading-tight">{manifest.name}</h1>
             {manifest.description && <p className="mt-1 text-[12.5px] text-ink-dim">{manifest.description}</p>}
           </div>
-          <span className="shrink-0 font-display text-[15px] italic text-ink-faint">flowmind</span>
+          <div className="flex shrink-0 items-center gap-3">
+            {priced && (
+              <span className="rounded-full border border-violet/40 bg-violet/[0.08] px-2.5 py-1 text-[11px] font-medium text-violet">{priceLabel}</span>
+            )}
+            <span className="font-display text-[15px] italic text-ink-faint">flowmind</span>
+          </div>
         </header>
 
         {manifest.level === "view" ? (
@@ -72,14 +116,44 @@ export function RunAppClient({ manifest, token }: { manifest: RunAppManifest; to
               ) : (
                 <p className="text-[12px] text-ink-faint">No inputs needed — just run it.</p>
               )}
-              <button
-                onClick={run}
-                disabled={running || !canRun}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet py-2.5 text-[13px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
-              >
-                {running ? <Loader2 size={15} className="animate-spin" /> : <Play size={14} className="fill-current" />}
-                Run
-              </button>
+
+              {priced && (
+                <label className="block">
+                  <span className="mb-1 block text-[11.5px] text-ink-dim">Your email</span>
+                  <input
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    type="email"
+                    placeholder="name@email.com"
+                    className="w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-[13px] text-ink outline-none focus:border-line-strong"
+                  />
+                </label>
+              )}
+              {paidJustNow && priced && (
+                <p className="rounded-lg border border-green/25 bg-green/[0.05] px-3 py-2 text-[12px] text-green">
+                  Payment received — enter the email you paid with and run.
+                </p>
+              )}
+
+              {paywall ? (
+                <button
+                  onClick={pay}
+                  disabled={paying}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet py-2.5 text-[13px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
+                >
+                  {paying ? <Loader2 size={15} className="animate-spin" /> : <Lock size={14} />}
+                  Pay {priceLabel} to run
+                </button>
+              ) : (
+                <button
+                  onClick={run}
+                  disabled={running || !canRun}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet py-2.5 text-[13px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
+                >
+                  {running ? <Loader2 size={15} className="animate-spin" /> : <Play size={14} className="fill-current" />}
+                  Run{priced ? ` · ${priceLabel}` : ""}
+                </button>
+              )}
               {error && <p className="text-[12px] text-red">{error}</p>}
             </div>
           </section>

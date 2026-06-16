@@ -1,5 +1,5 @@
 import type { Pipeline } from "@/lib/pipeline/schema";
-import type { ShareLevel } from "./schema";
+import type { PricingMode, ShareLevel } from "./schema";
 
 /** The ONLY pipeline data a Run-App client is allowed to receive. Built server-side. Contains no
  *  prompts, no model config, no tool credentials, no data sources, no node internals — just the
@@ -21,9 +21,15 @@ export type RunAppManifest = {
   outputTableIds: string[];
   /** present only at `view` level */
   structure?: { nodes: RunAppStructureNode[]; edges: RunAppStructureEdge[] };
+  /** pricing the requester pays (not sensitive) — drives the paywall (Task 05b) */
+  pricing?: { mode: PricingMode; amountUsd: number; currency: string; captureInputValues?: boolean };
 };
 
-export function toRunAppManifest(p: Pipeline, level: ShareLevel): RunAppManifest {
+export function toRunAppManifest(
+  p: Pipeline,
+  level: ShareLevel,
+  pricing?: { mode: PricingMode; amountUsd: number; currency: string; captureInputValues?: boolean },
+): RunAppManifest {
   const manifest: RunAppManifest = {
     pipelineId: p.id,
     name: p.name,
@@ -37,6 +43,7 @@ export function toRunAppManifest(p: Pipeline, level: ShareLevel): RunAppManifest
       fields: b.fields,
     })),
     outputTableIds: [...new Set(p.uiBindings.map((b) => b.tableId))],
+    pricing: pricing && pricing.mode !== "free" ? pricing : undefined,
   };
   // `run` reveals neither the structure nor any internals — only the form + results.
   if (level === "view") {

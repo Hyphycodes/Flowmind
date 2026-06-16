@@ -1,6 +1,7 @@
 import { stripeConfigured, stripeWebhookConfigured } from "@/lib/auth/config";
 import { verifyAndParseWebhook } from "@/lib/billing/stripe";
 import { getServiceSupabase } from "@/lib/billing/serviceClient";
+import { createEntitlement } from "@/lib/sharing/monetization";
 import { PLANS } from "@/lib/billing/plans";
 import type { PlanId } from "@/lib/billing/types";
 
@@ -84,6 +85,13 @@ export async function POST(req: Request) {
             { user_id: session.metadata.flowmind_user_id, stripe_customer_id: session.customer, updated_at: new Date().toISOString() },
             { onConflict: "user_id" },
           );
+        }
+        // Task 05b: Run-App purchase → mint the requester's entitlement (server-only write).
+        const shareId = session.metadata?.flowmind_share_id;
+        const requesterRef = session.metadata?.flowmind_requester_ref;
+        const shareMode = session.metadata?.flowmind_share_mode;
+        if (shareId && requesterRef && (shareMode === "per_run" || shareMode === "subscription")) {
+          await createEntitlement(shareId, requesterRef, shareMode, shareMode === "per_run" ? { runs: 1 } : {});
         }
         break;
       }

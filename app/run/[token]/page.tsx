@@ -1,4 +1,5 @@
 import { effectiveShareLevel, getShareByToken, getSharedPipeline } from "@/lib/sharing/server";
+import { getPricing } from "@/lib/sharing/monetization";
 import { toRunAppManifest } from "@/lib/sharing/manifest";
 import { RunAppClient } from "./RunAppClient";
 
@@ -26,5 +27,5 @@ export default async function RunAppPage({ params }: { params: Promise<{ token: 
     );
   }
 
-  return <RunAppClient manifest={toRunAppManifest(pipeline, level)} token={token} />;
+  return <RunAppClient manifest={toRunAppManifest(pipeline, level, getPricing(share))} token={token} />;
 }

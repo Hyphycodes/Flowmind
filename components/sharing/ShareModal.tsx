@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Copy, Link2, Loader2, RefreshCw, X } from "lucide-react";
+import { BarChart3, Check, Copy, DollarSign, Link2, Loader2, RefreshCw, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { hasSupabase } from "@/lib/supabase/client";
-import { listShares, upsertShare } from "@/lib/supabase/queries";
+import { listShareRuns, listShares, upsertShare } from "@/lib/supabase/queries";
 import { newId } from "@/lib/pipeline/validate";
-import { SHARE_LEVELS, SHARE_LEVEL_COPY, pipelineShareSchema, type PipelineShare, type ShareLevel } from "@/lib/sharing/schema";
+import {
+  SHARE_LEVELS,
+  SHARE_LEVEL_COPY,
+  pipelineShareSchema,
+  type PipelineShare,
+  type PricingMode,
+  type ShareLevel,
+  type ShareRun,
+} from "@/lib/sharing/schema";
+import { formatUsd } from "@/lib/ui/format";
 import { cn } from "@/lib/ui/cn";
 
 export function ShareModal() {
@@ -25,6 +34,9 @@ export function ShareModal() {
   const [linkEnabled, setLinkEnabled] = useState(false);
   const [linkToken, setLinkToken] = useState<string | undefined>(undefined);
   const [copied, setCopied] = useState(false);
+  const [pricingMode, setPricingMode] = useState<PricingMode>("free");
+  const [pricingAmount, setPricingAmount] = useState("5");
+  const [shareRuns, setShareRuns] = useState<ShareRun[]>([]);
 
   useEffect(() => {
     if (!open || !pipeline) return;
@@ -40,7 +52,10 @@ export function ShareModal() {
       setRecipients(existing?.recipients.map((r) => r.email) ?? []);
       setLinkEnabled(existing?.linkEnabled ?? false);
       setLinkToken(existing?.linkToken);
+      setPricingMode(existing?.pricing?.mode ?? "free");
+      setPricingAmount(existing?.pricing?.amountUsd ? String(existing.pricing.amountUsd) : "5");
       setPast([...new Set(shares.flatMap((s) => s.recipients.map((r) => r.email)))]);
+      if (existing?.id) void listShareRuns(existing.id).then((r) => !cancelled && setShareRuns(r));
       setLoading(false);
     })();
     return () => {
@@ -77,6 +92,7 @@ export function ShareModal() {
       recipients: recipients.map((e) => ({ email: e })),
       linkEnabled,
       linkToken,
+      pricing: { mode: pricingMode, amountUsd: Number(pricingAmount) || 0, currency: "usd" },
       updatedAt: new Date().toISOString(),
     });
     const ok = hasSupabase() ? await upsertShare(share) : true;
@@ -216,6 +232,45 @@ export function ShareModal() {
               )}
             </div>
 
+            {/* Monetize (run shares) */}
+            {level === "run" && (
+              <div className="space-y-2.5 rounded-xl border border-line bg-white/[0.02] p-3">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+                  <DollarSign size={12} /> Charge for access
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={pricingMode}
+                    onChange={(e) => setPricingMode(e.target.value as PricingMode)}
+                    className="rounded-lg border border-line bg-black/30 px-2.5 py-1.5 text-[12.5px] text-ink outline-none"
+                  >
+                    <option value="free" className="bg-[#14141c]">Free</option>
+                    <option value="per_run" className="bg-[#14141c]">Per run</option>
+                    <option value="subscription" className="bg-[#14141c]">Subscription</option>
+                  </select>
+                  {pricingMode !== "free" && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-ink-faint">$</span>
+                      <input
+                        value={pricingAmount}
+                        onChange={(e) => setPricingAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                        className="w-16 rounded-lg border border-line bg-black/30 px-2 py-1.5 text-[12.5px] text-ink outline-none focus:border-line-strong"
+                      />
+                      <span className="text-[11px] text-ink-faint">{pricingMode === "subscription" ? "/mo" : "per run"}</span>
+                    </div>
+                  )}
+                </div>
+                {pricingMode !== "free" && (
+                  <p className="rounded-lg border border-gold/30 bg-gold/[0.06] p-2 text-[10.5px] leading-relaxed text-ink-dim">
+                    Payments are collected by Flowmind today.{" "}
+                    <span className="font-medium text-gold">Owner payouts (Stripe Connect) coming soon</span> — see
+                    docs/monetization.md.
+                  </p>
+                )}
+                {shareRuns.length > 0 && <ShareAnalytics runs={shareRuns} />}
+              </div>
+            )}
+
             {!hasSupabase() && (
               <p className="text-[11px] leading-relaxed text-gold">
                 No database connected — sharing needs Supabase to persist the share and serve the Run-App.
@@ -237,6 +292,49 @@ export function ShareModal() {
           </button>
         </footer>
       </div>
+    </div>
+  );
+}
+
+function ShareAnalytics({ runs }: { runs: ShareRun[] }) {
+  const total = runs.length;
+  const ok = runs.filter((r) => r.status === "success").length;
+  const cost = runs.reduce((s, r) => s + (r.costUsd ?? 0), 0);
+  const inputCounts: Record<string, number> = {};
+  for (const r of runs) for (const k of r.inputKeys) inputCounts[k] = (inputCounts[k] ?? 0) + 1;
+  const busiest = Object.entries(inputCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
+  return (
+    <div className="space-y-2 border-t border-line/60 pt-2.5">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-ink-faint">
+        <BarChart3 size={11} /> Usage
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <Stat label="Runs" value={String(total)} />
+        <Stat label="Success" value={`${total ? Math.round((ok / total) * 100) : 0}%`} />
+        <Stat label="Cost" value={formatUsd(cost)} />
+      </div>
+      {busiest.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1 text-[10px] text-ink-faint">
+          busiest inputs:
+          {busiest.map(([k, n]) => (
+            <span key={k} className="rounded bg-white/[0.06] px-1.5 py-0.5 text-ink-dim">
+              {k} ·{n}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-black/20 p-1.5">
+      <div className="text-[14px] font-semibold text-ink">{value}</div>
+      <div className="text-[9px] text-ink-faint">{label}</div>
     </div>
   );
 }
