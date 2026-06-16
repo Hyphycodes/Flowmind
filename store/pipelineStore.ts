@@ -153,6 +153,9 @@ interface PipelineState {
   /** Living Library — reusable assets (nodes/prompts/tools) saved from your work. */
   libraryAssets: LibraryAsset[];
 
+  /** Sharing — the share modal (View / Run / Edit + Run-App link). */
+  shareOpen: boolean;
+
   /** Export system */
   exportOpen: boolean;
   exporting: boolean;
@@ -255,6 +258,8 @@ interface PipelineState {
   applyPromptToSelected: (prompt: string, assetId?: string) => void;
 
   /** Export system */
+  openShare: () => void;
+  closeShare: () => void;
   openExport: () => void;
   closeExport: () => void;
   openUpgrade: (gate: FeatureGateResult & { title?: string }) => void;
@@ -378,6 +383,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     preferences: null,
     clarify: null,
     libraryAssets: [],
+    shareOpen: false,
     exportOpen: false,
     exporting: false,
     exportHealth: null,
@@ -1161,6 +1167,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     },
 
     closeExport: () => set({ exportOpen: false }),
+
+    openShare: () => set({ shareOpen: true }),
+    closeShare: () => set({ shareOpen: false }),
 
     openUpgrade: (gate) => set({ upgradeGate: gate }),
     closeUpgrade: () => set({ upgradeGate: null }),

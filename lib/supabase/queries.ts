@@ -9,6 +9,7 @@ import {
 import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { builderPreferencesSchema, PREFERENCES_ID, type BuilderPreferences } from "@/lib/preferences/schema";
 import { libraryAssetSchema, type LibraryAsset } from "@/lib/library/schema";
+import { pipelineShareSchema, type PipelineShare } from "@/lib/sharing/schema";
 import type { ExportManifest } from "@/lib/export/schema";
 import { getSupabase } from "./client";
 
@@ -456,6 +457,66 @@ export async function deleteLibraryAsset(id: string): Promise<boolean> {
   const sb = getSupabase();
   if (!sb) return false;
   const { error } = await sb.from("library_assets").delete().eq("id", id);
+  return !error;
+}
+
+/* ── Pipeline shares (owner-side management) ─────────────────────────── */
+
+function rowToShare(r: Record<string, unknown>): PipelineShare | null {
+  try {
+    return pipelineShareSchema.parse({
+      id: r.id,
+      pipelineId: r.pipeline_id,
+      ownerId: (r.user_id as string | null) ?? null,
+      level: r.level ?? "run",
+      recipients: r.recipients ?? [],
+      linkEnabled: r.link_enabled ?? false,
+      linkToken: (r.link_token as string | null) ?? undefined,
+      createdAt: r.created_at ?? new Date().toISOString(),
+      updatedAt: r.updated_at ?? new Date().toISOString(),
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function listShares(pipelineId: string): Promise<PipelineShare[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("pipeline_shares")
+    .select("*")
+    .eq("pipeline_id", pipelineId)
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).flatMap((r) => {
+    const s = rowToShare(r);
+    return s ? [s] : [];
+  });
+}
+
+export async function upsertShare(s: PipelineShare): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("pipeline_shares").upsert(
+    {
+      id: s.id,
+      pipeline_id: s.pipelineId,
+      level: s.level,
+      recipients: s.recipients,
+      link_enabled: s.linkEnabled,
+      link_token: s.linkToken ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+  return !error;
+}
+
+export async function deleteShare(id: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb) return false;
+  const { error } = await sb.from("pipeline_shares").delete().eq("id", id);
   return !error;
 }
 

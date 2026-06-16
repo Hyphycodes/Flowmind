@@ -14,6 +14,7 @@ import {
   Search,
   Share2,
   TriangleAlert,
+  UserPlus,
 } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { CreditEstimate } from "@/components/billing/CreditEstimate";
@@ -32,6 +33,7 @@ export function TopBar() {
   const executionMode = usePipelineStore((s) => s.executionMode);
   const setExecutionMode = usePipelineStore((s) => s.setExecutionMode);
   const openExport = usePipelineStore((s) => s.openExport);
+  const openShare = usePipelineStore((s) => s.openShare);
 
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -250,6 +252,16 @@ export function TopBar() {
           className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-dim transition hover:bg-white/5 hover:text-ink"
         >
           <PanelRight size={16} />
+        </button>
+
+        <button
+          type="button"
+          onClick={openShare}
+          disabled={!pipeline}
+          title="Share — View, Run (hosted mini-app), or Edit access"
+          className="flex items-center gap-1.5 rounded-lg border border-line bg-white/[0.02] px-3 py-1.5 text-sm text-ink-dim transition hover:bg-white/5 hover:text-ink disabled:opacity-50"
+        >
+          <UserPlus size={15} /> Share
         </button>
 
         <button
