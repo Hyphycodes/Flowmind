@@ -2,17 +2,20 @@
 
 import { createElement, memo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Users } from "lucide-react";
+import { Clock, Users } from "lucide-react";
 import type { PipelineNode } from "@/lib/pipeline/schema";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
 import { cn } from "@/lib/ui/cn";
+import { formatDuration, formatUsd } from "@/lib/ui/format";
 
 function AgentNodeImpl({ data, selected }: NodeProps) {
   const node = data as unknown as PipelineNode;
   const sourceBadge = (data as { sourceBadge?: { label: string; meta: string } }).sourceBadge;
   const controllerKind = (data as { controllerKind?: string }).controllerKind;
   const dropTarget = (data as { dropTarget?: boolean }).dropTarget;
+  // Trace Studio: inline per-node duration + cost from the live run, shown only when real run data exists.
+  const runMeta = (data as { runMeta?: { durationMs: number; costUsd?: number } }).runMeta;
   const accent = hexFor({ color: node.color, type: node.type });
   const icon = iconForNode(node);
   const status = node.status;
@@ -77,6 +80,19 @@ function AgentNodeImpl({ data, selected }: NodeProps) {
         </div>
         <StatusDot status={status} accent={accent} />
       </div>
+
+      {runMeta && (
+        <div className="mt-2 flex items-center gap-1.5 text-[10px] tabular-nums text-ink-faint">
+          <Clock size={10} className="opacity-70" />
+          <span>{formatDuration(runMeta.durationMs)}</span>
+          {runMeta.costUsd != null && (
+            <>
+              <span className="opacity-40">·</span>
+              <span style={{ color: withAlpha(accent, 0.9) }}>{formatUsd(runMeta.costUsd)}</span>
+            </>
+          )}
+        </div>
+      )}
 
       {sourceBadge && (
         <div className="mt-2.5">

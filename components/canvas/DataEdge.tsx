@@ -36,6 +36,7 @@ export function DataEdge({
           strokeWidth: 1.6,
           opacity: d.animated ? 0.95 : 0.6,
           filter: `drop-shadow(0 0 5px ${color}55)`,
+          cursor: "pointer",
         }}
         className={d.animated ? "fm-edge-animated" : undefined}
       />

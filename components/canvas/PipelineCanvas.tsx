@@ -19,8 +19,10 @@ import { hexFor } from "@/lib/ui/colors";
 import { SOURCE_MODE_LABEL } from "@/lib/datasets/sourceModes";
 import { contractStatusColor } from "@/lib/contracts/check";
 import { resolveTeamView, layoutAgents } from "@/lib/pipeline/teamView";
+import { nodeMetrics } from "@/lib/trace/metrics";
 import { AgentNode } from "./AgentNode";
 import { DataEdge } from "./DataEdge";
+import { EdgePeek } from "./EdgePeek";
 import { FloatingCanvasControls } from "./FloatingCanvasControls";
 
 const nodeTypes = { agent: AgentNode };
@@ -37,6 +39,8 @@ function Flow() {
   const runningNodeId = usePipelineStore((s) => s.runningNodeId);
   const runningAgentId = usePipelineStore((s) => s.runningAgentId);
   const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
+  const steps = usePipelineStore((s) => s.steps);
+  const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
   const teamPath = usePipelineStore((s) => s.teamPath);
   const selectNode = usePipelineStore((s) => s.selectNode);
   const setNodePosition = usePipelineStore((s) => s.setNodePosition);
@@ -58,6 +62,10 @@ function Flow() {
   const nodeList = pipeline?.nodes;
   const datasetSig = datasets.map((d) => `${d.id}:${d.rows.length}:${d.qualityScore ?? ""}`).join("|");
   const agentSig = agentRunTraces.map((t) => `${t.teamNodeId}:${t.agentId}:${t.status}`).join("|");
+  const metricSig = steps.map((s) => `${s.nodeId}:${Math.round(s.durationMs)}:${s.costUsd ?? ""}`).join("|");
+  const teamCostSig = teamRunTraces.map((t) => `${t.teamNodeId}:${t.costUsd ?? ""}`).join("|");
+
+  const [edgePeek, setEdgePeek] = useState<{ edgeId: string; x: number; y: number } | null>(null);
 
   const nodes: Node[] = useMemo(() => {
     if (!pipeline) return [];
@@ -96,6 +104,7 @@ function Flow() {
       });
     }
 
+    const metrics = nodeMetrics(steps, agentRunTraces, teamRunTraces);
     return pipeline.nodes.map((n) => {
       let sourceBadge: { label: string; meta: string } | undefined;
       if (n.source) {
@@ -105,16 +114,22 @@ function Flow() {
         const parts = [rows != null ? `${rows} rows` : null, quality != null ? `${quality}%` : null].filter(Boolean);
         sourceBadge = { label: SOURCE_MODE_LABEL[n.source.mode], meta: parts.join(" · ") };
       }
+      const metric = metrics.get(n.id);
       return {
         id: n.id,
         type: "agent",
         position: n.position,
-        data: { ...(n as unknown as Record<string, unknown>), sourceBadge, dropTarget: n.id === dropTargetId },
+        data: {
+          ...(n as unknown as Record<string, unknown>),
+          sourceBadge,
+          dropTarget: n.id === dropTargetId,
+          runMeta: metric ? { durationMs: metric.durationMs, costUsd: metric.costUsd } : undefined,
+        },
         selected: n.id === selectedNodeId,
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeList, statusSig, selectedNodeId, datasetSig, pathKey, dropTargetId, agentSig, runningAgentId]);
+  }, [nodeList, statusSig, selectedNodeId, datasetSig, pathKey, dropTargetId, agentSig, runningAgentId, metricSig, teamCostSig]);
 
   const edges: Edge[] = useMemo(() => {
     if (!pipeline) return [];
@@ -235,11 +250,20 @@ function Flow() {
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={() => {}}
-          onNodeClick={(_, n) => selectNode(n.id)}
+          onNodeClick={(_, n) => {
+            selectNode(n.id);
+            setEdgePeek(null);
+          }}
           onNodeDoubleClick={onNodeDoubleClick}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
-          onPaneClick={() => selectNode(null)}
+          onEdgeClick={(e, edge) => {
+            if (!inTeam) setEdgePeek({ edgeId: edge.id, x: e.clientX, y: e.clientY });
+          }}
+          onPaneClick={() => {
+            selectNode(null);
+            setEdgePeek(null);
+          }}
           fitView
           fitViewOptions={{ padding: 0.28, maxZoom: 1 }}
           minZoom={0.2}
@@ -265,6 +289,7 @@ function Flow() {
           <FloatingCanvasControls tool={tool} setTool={setTool} />
         </ReactFlow>
       </motion.div>
+      <EdgePeek peek={inTeam ? null : edgePeek} onClose={() => setEdgePeek(null)} />
     </>
   );
 }

@@ -41,6 +41,7 @@ import {
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
 import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
+import { descendantsOf } from "@/lib/pipeline/graph";
 import { canEnterTeam } from "@/lib/pipeline/teamView";
 import { newId } from "@/lib/pipeline/validate";
 import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
@@ -60,7 +61,7 @@ import type { FeatureGateResult } from "@/lib/billing/types";
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
 export type PanelTab = "build" | "run" | "data";
-type RunOptions = { onlyNodeId?: string; onlyAgentId?: string };
+type RunOptions = { onlyNodeId?: string; onlyAgentId?: string; fromNodeId?: string };
 
 export type GenerateDatasetInput = {
   name?: string;
@@ -941,8 +942,30 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     runPipeline: async (options = {}) => {
       const p = get().pipeline;
       if (!p || get().runStatus === "running") return;
-      const runNodes = options.onlyNodeId ? p.nodes.filter((n) => n.id === options.onlyNodeId) : p.nodes;
-      const seedTables = options.onlyNodeId ? (get().tables.length ? get().tables : p.outputTables) : [];
+      const scoped = Boolean(options.onlyNodeId || options.fromNodeId);
+      // Replay-from-here: the node + its downstream descendants; upstream is seeded, not re-run.
+      const subset = options.fromNodeId ? descendantsOf(p, options.fromNodeId) : null;
+      const seedTables = scoped ? (get().tables.length ? get().tables : p.outputTables) : [];
+      const prior = get().steps;
+      const downstream = subset ? subset.size - 1 : 0;
+      const replayNotice =
+        options.fromNodeId && subset
+          ? downstream > 0
+            ? `Replaying this node and ${downstream} downstream node${downstream === 1 ? "" : "s"}.`
+            : "Replaying this node."
+          : null;
+
+      // Step rows. onlyNodeId: just that node. fromNodeId: every node, with the downstream
+      // subset reset to idle and upstream rows preserved so the timeline keeps its history.
+      const steps: RunStep[] = options.onlyNodeId
+        ? p.nodes
+            .filter((n) => n.id === options.onlyNodeId)
+            .map((n) => ({ nodeId: n.id, title: n.title, status: "idle", durationMs: 0 }))
+        : p.nodes.map((n) => {
+            if (!subset || subset.has(n.id))
+              return { nodeId: n.id, title: n.title, status: "idle" as const, durationMs: 0 };
+            return prior.find((s) => s.nodeId === n.id) ?? { nodeId: n.id, title: n.title, status: n.status, durationMs: 0 };
+          });
 
       set({
         runStatus: "running",
@@ -953,17 +976,19 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         runStartedAt: new Date().toISOString(),
         finalOutput: null,
         activeRunTrace: null,
-        teamRunTraces: [],
-        agentRunTraces: [],
-        handoffPackets: [],
-        packetWarnings: [],
+        // Preserve upstream traces/packets on a downstream replay; clear them on a full run.
+        teamRunTraces: subset ? get().teamRunTraces.filter((t) => !subset.has(t.teamNodeId)) : [],
+        agentRunTraces: subset ? get().agentRunTraces.filter((t) => !subset.has(t.teamNodeId)) : [],
+        handoffPackets: subset ? get().handoffPackets.filter((pk) => !subset.has(pk.fromNodeId)) : [],
+        packetWarnings: subset ? get().packetWarnings.filter((w) => !subset.has(w.fromNodeId)) : [],
         selectedPacketId: null,
         selectedTeamTraceId: null,
         tables: seedTables,
         panelTab: "run",
         panelOpen: true,
-        steps: runNodes.map((n) => ({ nodeId: n.id, title: n.title, status: "idle", durationMs: 0 })),
-        pipeline: applyStatuses(p, () => "idle"),
+        steps,
+        pipeline: applyStatuses(p, (n) => (subset && !subset.has(n.id) ? n.status : "idle")),
+        notice: replayNotice,
       });
 
       const setNodeStatus = (id: string, status: NodeStatus) => {
@@ -1033,8 +1058,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
           if (trace && p) {
             const evalResults = runEvals(p, trace);
             trace = { ...trace, evalResults };
-            // Every full run becomes a Take; scoped re-runs (solo agent / single team) don't.
-            if (!options.onlyNodeId) {
+            // Every full run becomes a Take; scoped re-runs (solo agent / single node / replay) don't.
+            if (!options.onlyNodeId && !options.fromNodeId) {
               newTake = buildTake({ pipeline: p, trace, evalResults, mode: get().executionMode });
             }
           }
@@ -1048,15 +1073,18 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
             notice: newTake
               ? `Take saved: ${newTake.name} — ${newTake.overallScore ?? 0}/100`
               : ev.error ?? null,
-            activeRunTrace: trace ?? s.activeRunTrace,
-            teamRunTraces: trace?.teamRuns ?? s.teamRunTraces,
-            agentRunTraces: trace?.agentRuns ?? s.agentRunTraces,
-            handoffPackets: trace?.packets ?? s.handoffPackets,
-            packetWarnings: trace?.packetWarnings ?? s.packetWarnings,
+            // A replay's trace covers only the re-run subset; keep the live-accumulated
+            // state (upstream preserved + subset re-emitted) rather than overwriting with it.
+            activeRunTrace: options.fromNodeId ? s.activeRunTrace : trace ?? s.activeRunTrace,
+            teamRunTraces: options.fromNodeId ? s.teamRunTraces : trace?.teamRuns ?? s.teamRunTraces,
+            agentRunTraces: options.fromNodeId ? s.agentRunTraces : trace?.agentRuns ?? s.agentRunTraces,
+            handoffPackets: options.fromNodeId ? s.handoffPackets : trace?.packets ?? s.handoffPackets,
+            packetWarnings: options.fromNodeId ? s.packetWarnings : trace?.packetWarnings ?? s.packetWarnings,
             takes: newTake ? [newTake, ...s.takes].slice(0, 60) : s.takes,
             activeTakeId: newTake ? newTake.id : s.activeTakeId,
           }));
-          if (p && hasSupabase() && trace) {
+          // Persist only full runs; scoped re-runs/replays don't overwrite the latest run.
+          if (p && hasSupabase() && trace && !options.onlyNodeId && !options.fromNodeId) {
             void saveRun(trace);
             if (newTake) void saveTake(newTake);
           }
@@ -1072,6 +1100,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
             pipeline: p,
             onlyNodeId: options.onlyNodeId,
             onlyAgentId: options.onlyAgentId,
+            fromNodeId: options.fromNodeId,
             seedTables,
             mode: get().executionMode,
           }),

@@ -17,6 +17,7 @@ import {
   type TeamRunTrace,
 } from "@/lib/pipeline/schema";
 import { newId } from "@/lib/pipeline/validate";
+import { descendantsOf } from "@/lib/pipeline/graph";
 import { getBillingAccount, recordRunSpend } from "@/lib/billing/usage";
 import { estimateCreditsForRun } from "@/lib/billing/credits";
 import { canRunPipeline } from "@/lib/billing/featureGates";
@@ -132,6 +133,7 @@ export async function POST(req: Request) {
           pipeline?: unknown;
           onlyNodeId?: unknown;
           onlyAgentId?: unknown;
+          fromNodeId?: unknown;
           seedTables?: unknown;
           mode?: unknown;
         })
@@ -148,6 +150,13 @@ export async function POST(req: Request) {
   const modelAvailable = mode === "simulate" ? false : hasAnthropicKey();
   const onlyNodeId = typeof requestBody.onlyNodeId === "string" ? requestBody.onlyNodeId : undefined;
   const onlyAgentId = typeof requestBody.onlyAgentId === "string" ? requestBody.onlyAgentId : undefined;
+  const fromNodeId =
+    typeof requestBody.fromNodeId === "string" && pipeline.nodes.some((n) => n.id === requestBody.fromNodeId)
+      ? requestBody.fromNodeId
+      : undefined;
+  // Scoped runs (single node, single agent, or replay-from-here) are cheap re-runs:
+  // they don't pass the full billing gate, don't record spend, and don't create a Take.
+  const scoped = Boolean(onlyNodeId || fromNodeId);
   const seedTables = Array.isArray(requestBody.seedTables)
     ? requestBody.seedTables.flatMap((t: unknown) => {
         const parsedTable = outputTableSchema.safeParse(t);
@@ -156,7 +165,7 @@ export async function POST(req: Request) {
     : [];
   // ── Billing gate (full runs only). No-op unless NEXT_PUBLIC_BILLING_ENABLED=true. ──
   const runEstimate = estimateCreditsForRun(pipeline, { onlyNodeId });
-  if (!onlyNodeId) {
+  if (!scoped) {
     const account = await getBillingAccount();
     const gate = canRunPipeline(account, runEstimate);
     if (!gate.allowed) {
@@ -164,14 +173,23 @@ export async function POST(req: Request) {
     }
   }
 
-  const order = onlyNodeId ? [onlyNodeId] : topoOrder(pipeline);
+  const order = onlyNodeId
+    ? [onlyNodeId]
+    : fromNodeId
+      ? (() => {
+          const desc = descendantsOf(pipeline, fromNodeId);
+          return topoOrder(pipeline).filter((id) => desc.has(id));
+        })()
+      : topoOrder(pipeline);
   const enc = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (e: RunEvent) => controller.enqueue(enc.encode(JSON.stringify(e) + "\n"));
       const tables = new Map<string, OutputTable>();
-      if (onlyNodeId) for (const table of seedTables) tables.set(table.id, table);
+      // Scoped runs seed the upstream outputs from the prior run so we don't re-execute the
+      // whole graph; the executed subset overwrites its own tables.
+      if (scoped) for (const table of seedTables) tables.set(table.id, table);
       const mockInputs = Object.fromEntries(pipeline.mockInputs.map((f) => [f.key, f.value]));
       let finalOutput: FinalOutput | undefined;
       const runId = newId("run");
@@ -302,7 +320,7 @@ export async function POST(req: Request) {
         };
         send({ kind: "run-done", status: "success", finalOutput, runTrace });
         // Record credit spend + run count (best-effort; no-op unless billing is enabled + full run).
-        if (!onlyNodeId) {
+        if (!scoped) {
           void recordRunSpend({
             credits: runEstimate.credits,
             pipelineId: pipeline.id,

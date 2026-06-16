@@ -6,6 +6,8 @@ import type { Take } from "@/lib/pipeline/schema";
 import type { EvalResult } from "@/lib/evals/schema";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { compareTakes, summarizeRunCost } from "@/lib/takes/build";
+import { diffTraces, type NodeDiffRow } from "@/lib/takes/diff";
+import { formatDuration, formatUsd } from "@/lib/ui/format";
 import { cn } from "@/lib/ui/cn";
 
 const MODE_LABEL: Record<string, string> = { simulate: "Simulate", live: "Live", hybrid: "Hybrid" };
@@ -232,6 +234,14 @@ function EvalCard({ result, title }: { result: EvalResult; title: string }) {
 
 function ComparisonView({ takes }: { takes: Take[] }) {
   const comparison = useMemo(() => compareTakes(takes), [takes]);
+  // Per-node run diff when exactly two takes are compared: line up older → newer.
+  const pair = useMemo(() => {
+    if (takes.length !== 2) return null;
+    const withTrace = takes.filter((t) => t.trace);
+    if (withTrace.length !== 2) return null;
+    const [older, newer] = [...withTrace].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return { older, newer, rows: diffTraces(older.trace!, newer.trace!) };
+  }, [takes]);
 
   return (
     <section className="space-y-3">
@@ -292,7 +302,84 @@ function ComparisonView({ takes }: { takes: Take[] }) {
           ))}
         </div>
       )}
+
+      {pair && <NodeDiffView olderName={pair.older.name} newerName={pair.newer.name} rows={pair.rows} />}
     </section>
+  );
+}
+
+/** Per-node side-by-side: status / cost / duration for older → newer, flagging nodes whose
+ *  output changed, that got slower, or that got more expensive. Click a node to select it. */
+function NodeDiffView({ olderName, newerName, rows }: { olderName: string; newerName: string; rows: NodeDiffRow[] }) {
+  const selectNode = usePipelineStore((s) => s.selectNode);
+  const changed = rows.filter((r) => r.outputChanged || r.slower || r.costlier || r.statusChanged || r.onlyIn);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-ink-faint">
+        <span>Per-node diff</span>
+        <span className="normal-case">
+          <span className="text-ink-dim">{olderName}</span> {"->"} <span className="text-ink">{newerName}</span>
+        </span>
+      </div>
+      <div className="space-y-1">
+        {rows.map((r) => {
+          const interesting = r.outputChanged || r.slower || r.costlier || r.statusChanged || r.onlyIn;
+          return (
+            <button
+              key={r.nodeId}
+              type="button"
+              onClick={() => selectNode(r.nodeId)}
+              className={cn(
+                "w-full rounded-lg border px-2.5 py-1.5 text-left transition hover:brightness-110",
+                interesting ? "border-violet/40 bg-violet/[0.05]" : "border-line bg-white/[0.02]",
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-[11.5px] font-medium text-ink">{r.title}</span>
+                <div className="flex shrink-0 items-center gap-1">
+                  {r.onlyIn && <Tag label={r.onlyIn === "b" ? "new" : "removed"} tone="violet" />}
+                  {r.statusChanged && <Tag label={r.bStatus ?? "?"} tone={r.bStatus === "error" ? "red" : "gold"} />}
+                  {r.outputChanged && <Tag label="output changed" tone="violet" />}
+                  {r.slower && <Tag label="slower" tone="orange" />}
+                  {r.faster && !r.slower && <Tag label="faster" tone="green" />}
+                  {r.costlier && <Tag label="costlier" tone="red" />}
+                  {r.cheaper && !r.costlier && <Tag label="cheaper" tone="green" />}
+                </div>
+              </div>
+              <div className="mt-0.5 flex items-center gap-3 text-[10px] tabular-nums text-ink-faint">
+                <span>
+                  {formatDuration(r.aDurationMs)} {"->"} {formatDuration(r.bDurationMs)}
+                </span>
+                <span>
+                  {formatUsd(r.aCostUsd)} {"->"} {formatUsd(r.bCostUsd)}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {changed.length === 0 && (
+        <p className="text-[11px] text-ink-faint">No node-level differences — the two runs match.</p>
+      )}
+    </div>
+  );
+}
+
+const TAG_TONE: Record<string, { color: string; bg: string }> = {
+  violet: { color: "#a78bfa", bg: "rgba(139,92,246,0.16)" },
+  orange: { color: "#fb923c", bg: "rgba(251,146,60,0.16)" },
+  red: { color: "#f87171", bg: "rgba(248,113,113,0.16)" },
+  green: { color: "#34d399", bg: "rgba(52,211,153,0.16)" },
+  gold: { color: "#f5c451", bg: "rgba(245,196,81,0.16)" },
+};
+
+function Tag({ label, tone }: { label: string; tone: keyof typeof TAG_TONE }) {
+  const t = TAG_TONE[tone];
+  return (
+    <span className="rounded px-1 py-[1px] text-[9px] font-medium capitalize" style={{ color: t.color, background: t.bg }}>
+      {label}
+    </span>
   );
 }
 

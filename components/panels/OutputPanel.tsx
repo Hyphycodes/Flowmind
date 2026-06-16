@@ -10,6 +10,7 @@ import { TableList } from "./TableList";
 import { UIPreview } from "./UIPreview";
 import { DatasetPanel } from "./DatasetPanel";
 import { TakesPanel } from "./TakesPanel";
+import { RunTimeline } from "./RunTimeline";
 import { ProductPanel } from "./ProductPanel";
 
 const TABS = [
@@ -149,6 +150,10 @@ function RunTab() {
               Run trace
             </summary>
             <div className="space-y-6 border-t border-line px-3 pb-3 pt-3">
+              <section>
+                <h3 className="mb-2 text-[12px] font-medium text-ink">Timeline</h3>
+                <RunTimeline />
+              </section>
               <PacketTab />
               <TakesPanel />
             </div>

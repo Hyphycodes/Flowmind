@@ -1,12 +1,15 @@
 "use client";
 
 import { createElement, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, Bot, Loader2, RotateCw, Settings2, Users, X } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Bot, FastForward, Loader2, RotateCw, Settings2, Users, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
 import { resolveTeamView } from "@/lib/pipeline/teamView";
+import { descendantsOf } from "@/lib/pipeline/graph";
+import { useAiAvailable } from "@/lib/ai/useAiAvailable";
 import type { AgentConfig, PipelineNode } from "@/lib/pipeline/schema";
+import { ExplainButton } from "./ExplainButton";
 
 const W = 300;
 
@@ -175,6 +178,7 @@ function NodeDetail({
   popRef: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }) {
+  const pipeline = usePipelineStore((s) => s.pipeline);
   const steps = usePipelineStore((s) => s.steps);
   const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
   const runStatus = usePipelineStore((s) => s.runStatus);
@@ -183,6 +187,7 @@ function NodeDetail({
   const openInspector = usePipelineStore((s) => s.openInspector);
   const runPipeline = usePipelineStore((s) => s.runPipeline);
   const runSoloAgent = usePipelineStore((s) => s.runSoloAgent);
+  const aiAvailable = useAiAvailable();
 
   const isAgent = Boolean(agent);
   const accent = isAgent
@@ -219,6 +224,7 @@ function NodeDetail({
 
   const icon = node ? iconForNode(node) : Bot;
   const running = runStatus === "running";
+  const downstreamCount = node && pipeline ? descendantsOf(pipeline, node.id).size - 1 : 0;
 
   return (
     <Shell style={style} popRef={popRef}>
@@ -248,15 +254,36 @@ function NodeDetail({
         <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-ink-faint">{step?.summary || trace?.outputSummary}</p>
       )}
 
-      <button
-        type="button"
-        onClick={rerun}
-        disabled={running}
-        className="mt-3.5 flex w-full items-center justify-center gap-2 rounded-lg border border-line-strong bg-white/[0.04] py-2 text-[13px] font-medium text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
-      >
-        {running ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
-        {isAgent ? "Re-run agent" : "Re-run node"}
-      </button>
+      <div className="mt-3.5 space-y-2.5">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={rerun}
+            disabled={running}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-line-strong bg-white/[0.04] py-2 text-[12.5px] font-medium text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
+          >
+            {running ? <Loader2 size={14} className="animate-spin" /> : <RotateCw size={14} />}
+            {isAgent ? "Re-run agent" : "Re-run node"}
+          </button>
+          {node && !isAgent && (
+            <button
+              type="button"
+              onClick={() => void runPipeline({ fromNodeId: node.id })}
+              disabled={running}
+              title={
+                downstreamCount > 0
+                  ? `Re-run this node and ${downstreamCount} downstream node${downstreamCount === 1 ? "" : "s"}, seeding upstream from the last run`
+                  : "Re-run this node, seeding upstream from the last run"
+              }
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-line-strong bg-white/[0.04] py-2 text-[12.5px] font-medium text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
+            >
+              <FastForward size={14} />
+              Replay from here{downstreamCount > 0 ? ` · ${downstreamCount}` : ""}
+            </button>
+          )}
+        </div>
+        {node && aiAvailable && <ExplainButton scope="node" focusId={node.id} />}
+      </div>
     </Shell>
   );
 }
