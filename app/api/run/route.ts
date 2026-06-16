@@ -9,6 +9,9 @@ import { runPipelineCore } from "@/lib/run/core";
 import { getBillingAccount, recordRunSpend } from "@/lib/billing/usage";
 import { estimateCreditsForRun } from "@/lib/billing/credits";
 import { canRunPipeline } from "@/lib/billing/featureGates";
+import { getCurrentUser } from "@/lib/auth/user";
+import { recordAudit } from "@/lib/governance/audit";
+import { checkRunGovernance, getPipelineWorkspace } from "@/lib/governance/enforce";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -57,11 +60,27 @@ export async function POST(req: Request) {
 
   // ── Billing gate (full runs only). No-op unless NEXT_PUBLIC_BILLING_ENABLED=true. ──
   const runEstimate = estimateCreditsForRun(pipeline, { onlyNodeId });
+  const actor = !scoped ? await getCurrentUser() : null;
   if (!scoped) {
     const account = await getBillingAccount();
     const gate = canRunPipeline(account, runEstimate);
     if (!gate.allowed) {
       return Response.json({ error: gate.reason ?? "Out of credits", gate, estimate: runEstimate }, { status: 402 });
+    }
+
+    // ── Governance gate (workspace budgets + approval). No-op without a workspace/config. ──
+    const estimatedUsd = pipeline.nodes.reduce(
+      (sum, n) =>
+        sum +
+        (n.team ? n.team.agents.filter((a) => !a.isController).length * 0.02 : n.type === "agent" || n.type === "evaluator" ? 0.02 : 0),
+      0,
+    );
+    const gov = await checkRunGovernance({ pipelineId: pipeline.id, estimatedUsd, actorUserId: actor?.id });
+    if (!gov.allowed) {
+      return Response.json(
+        { error: gov.reason ?? "Blocked by workspace governance.", governance: { needsApproval: gov.needsApproval ?? false } },
+        { status: 403 },
+      );
     }
   }
 
@@ -86,6 +105,20 @@ export async function POST(req: Request) {
           runId: trace.id,
           modelCostEstimate: { usd: trace.costUsd },
         });
+      }
+      // Audit the run (best-effort; no-op without a workspace).
+      if (!scoped) {
+        void (async () => {
+          await recordAudit({
+            workspaceId: await getPipelineWorkspace(pipeline.id),
+            actorUserId: actor?.id,
+            action: "run.completed",
+            targetType: "pipeline",
+            targetId: pipeline.id,
+            summary: `${pipeline.name} run ${trace.status}`,
+            metadata: { costUsd: trace.costUsd ?? null, status: trace.status },
+          });
+        })();
       }
       controller.close();
     },

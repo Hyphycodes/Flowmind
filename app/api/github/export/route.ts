@@ -15,6 +15,8 @@ import type { GitHubExportTarget } from "@/lib/github/types";
 import { getBillingAccount, logCreditEvent, incrementUsageCounter } from "@/lib/billing/usage";
 import { canCreateGitHubPr } from "@/lib/billing/featureGates";
 import { CREDIT_COST } from "@/lib/billing/credits";
+import { recordAudit } from "@/lib/governance/audit";
+import { getPipelineWorkspace } from "@/lib/governance/enforce";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -146,6 +148,17 @@ export async function POST(req: Request) {
       void logCreditEvent({ eventType: "github_pr_export", creditsDelta: -CREDIT_COST.githubPrExport, pipelineId: pipeline.id });
     }
   }
+
+  // Governance: audit the export (best-effort; no-op without a workspace).
+  void (async () =>
+    recordAudit({
+      workspaceId: await getPipelineWorkspace(pipeline.id),
+      action: "export.generated",
+      targetType: "pipeline",
+      targetId: pipeline.id,
+      summary: `Export to GitHub (${(payload.modes ?? []).join(", ") || "default"})`,
+      metadata: { target: "github" },
+    }))();
 
   return Response.json({ result });
 }

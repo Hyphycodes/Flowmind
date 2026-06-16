@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Building2, Check, ChevronsUpDown, Plus, Settings2 } from "lucide-react";
+import { Building2, Check, ChevronsUpDown, Plus, Settings2, Shield } from "lucide-react";
 import { useWorkspaceStore } from "@/store/workspaceStore";
 import { cn } from "@/lib/ui/cn";
 
@@ -74,6 +74,13 @@ export function WorkspaceSwitcher() {
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] text-ink-dim transition hover:text-ink"
           >
             <Settings2 size={12} /> Members & settings
+          </Link>
+          <Link
+            href="/workspace/governance"
+            onClick={() => setOpen(false)}
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] text-ink-dim transition hover:text-ink"
+          >
+            <Shield size={12} /> Governance
           </Link>
           <button
             onClick={async () => {

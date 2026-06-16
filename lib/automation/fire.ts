@@ -2,6 +2,8 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { rowToTrigger } from "@/lib/supabase/queries";
 import { newId } from "@/lib/pipeline/validate";
 import { runPipelineHeadless } from "@/lib/run/headless";
+import { recordAudit } from "@/lib/governance/audit";
+import { getPipelineWorkspace } from "@/lib/governance/enforce";
 import type { RunTrace } from "@/lib/pipeline/schema";
 import { MAX_TRIGGER_CHAIN_DEPTH, RETRY_BACKOFF_MINUTES, type Trigger } from "./schema";
 
@@ -122,6 +124,15 @@ export async function fireTrigger(
   const inputs = { ...flatten(trigger.defaultInputs), ...(opts.inputs ?? {}) };
   const trace = await runPipelineHeadless({ pipelineId: trigger.pipelineId, inputs, source: opts.source });
   await recordTriggerRun(trigger.id, trace, attempt, startedAt);
+  void (async () =>
+    recordAudit({
+      workspaceId: await getPipelineWorkspace(trigger.pipelineId),
+      action: "trigger.fired",
+      targetType: "trigger",
+      targetId: trigger.id,
+      summary: `Trigger fired (${opts.source}) → ${trace?.status ?? "error"}`,
+      metadata: { source: opts.source, status: trace?.status, costUsd: trace?.costUsd ?? null, attempt },
+    }))();
 
   if (trace?.status === "success") {
     // A previously-failing trigger that succeeds resolves the alert.
