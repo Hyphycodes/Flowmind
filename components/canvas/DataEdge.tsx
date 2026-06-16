@@ -2,7 +2,7 @@
 
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, type EdgeProps } from "@xyflow/react";
 
-type EdgeData = { color?: string; label?: string; animated?: boolean; contractColor?: string };
+type EdgeData = { color?: string; label?: string; animated?: boolean; contractColor?: string; ghost?: boolean; removing?: boolean };
 
 export function DataEdge({
   id,
@@ -25,6 +25,7 @@ export function DataEdge({
   });
   const d = (data ?? {}) as EdgeData;
   const color = d.color ?? "#8b5cf6";
+  const dashed = d.ghost || d.removing; // Chat Copilot ghost preview
 
   return (
     <>
@@ -33,12 +34,13 @@ export function DataEdge({
         path={path}
         style={{
           stroke: color,
-          strokeWidth: 1.6,
-          opacity: d.animated ? 0.95 : 0.6,
+          strokeWidth: dashed ? 1.8 : 1.6,
+          strokeDasharray: dashed ? "6 4" : undefined,
+          opacity: d.removing ? 0.35 : d.ghost ? 0.85 : d.animated ? 0.95 : 0.6,
           filter: `drop-shadow(0 0 5px ${color}55)`,
           cursor: "pointer",
         }}
-        className={d.animated ? "fm-edge-animated" : undefined}
+        className={d.animated && !dashed ? "fm-edge-animated" : undefined}
       />
       {d.label ? (
         <EdgeLabelRenderer>

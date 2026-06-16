@@ -16,6 +16,9 @@ function AgentNodeImpl({ data, selected }: NodeProps) {
   const dropTarget = (data as { dropTarget?: boolean }).dropTarget;
   // Trace Studio: inline per-node duration + cost from the live run, shown only when real run data exists.
   const runMeta = (data as { runMeta?: { durationMs: number; costUsd?: number } }).runMeta;
+  // Chat Copilot ghost preview: a proposed (dashed) node, or an existing node marked for removal.
+  const ghost = (data as { ghost?: boolean }).ghost;
+  const removing = (data as { removing?: boolean }).removing;
   const accent = hexFor({ color: node.color, type: node.type });
   const icon = iconForNode(node);
   const status = node.status;
@@ -34,12 +37,19 @@ function AgentNodeImpl({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={cn("fm-node group relative w-[232px] rounded-2xl p-[14px] glass", status === "running" && "fm-running")}
+      className={cn(
+        "fm-node group relative w-[232px] rounded-2xl p-[14px] glass",
+        status === "running" && "fm-running",
+        ghost && "border-dashed",
+        removing && "opacity-40",
+      )}
       style={{
         // @ts-expect-error css var
         "--accent": accent,
-        boxShadow: ring,
-        borderColor: status === "idle" && !selected ? undefined : withAlpha(accent, 0.5),
+        boxShadow: ghost ? `0 0 0 1px ${withAlpha(accent, 0.5)}` : ring,
+        borderColor: ghost ? withAlpha(accent, 0.7) : status === "idle" && !selected ? undefined : withAlpha(accent, 0.5),
+        borderStyle: ghost ? "dashed" : undefined,
+        opacity: ghost ? 0.72 : removing ? 0.4 : undefined,
         background: `linear-gradient(180deg, ${withAlpha(accent, 0.06)}, rgba(10,10,18,0.72))`,
       }}
     >
@@ -55,7 +65,16 @@ function AgentNodeImpl({ data, selected }: NodeProps) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <h3 className="truncate text-[13.5px] font-medium leading-tight text-ink">{node.title}</h3>
+            <h3 className={cn("truncate text-[13.5px] font-medium leading-tight text-ink", removing && "line-through")}>{node.title}</h3>
+            {ghost ? (
+              <span className="rounded-md px-1 py-[1px] text-[9px] font-medium" style={{ background: "rgba(52,211,153,0.18)", color: "#34d399" }}>
+                new
+              </span>
+            ) : removing ? (
+              <span className="rounded-md px-1 py-[1px] text-[9px] font-medium" style={{ background: "rgba(248,113,113,0.18)", color: "#f87171" }}>
+                removing
+              </span>
+            ) : null}
             {node.team ? (
               <span
                 className="inline-flex items-center gap-0.5 rounded-md px-1 py-[1px] text-[9px] font-medium"

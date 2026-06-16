@@ -20,6 +20,7 @@ import { SOURCE_MODE_LABEL } from "@/lib/datasets/sourceModes";
 import { contractStatusColor } from "@/lib/contracts/check";
 import { resolveTeamView, layoutAgents } from "@/lib/pipeline/teamView";
 import { nodeMetrics } from "@/lib/trace/metrics";
+import { previewOf, type EditChange } from "@/lib/pipeline/editDiff";
 import { AgentNode } from "./AgentNode";
 import { DataEdge } from "./DataEdge";
 import { EdgePeek } from "./EdgePeek";
@@ -41,6 +42,8 @@ function Flow() {
   const agentRunTraces = usePipelineStore((s) => s.agentRunTraces);
   const steps = usePipelineStore((s) => s.steps);
   const teamRunTraces = usePipelineStore((s) => s.teamRunTraces);
+  const editProposal = usePipelineStore((s) => s.editProposal);
+  const editChecked = usePipelineStore((s) => s.editChecked);
   const teamPath = usePipelineStore((s) => s.teamPath);
   const selectNode = usePipelineStore((s) => s.selectNode);
   const setNodePosition = usePipelineStore((s) => s.setNodePosition);
@@ -66,6 +69,16 @@ function Flow() {
   const teamCostSig = teamRunTraces.map((t) => `${t.teamNodeId}:${t.costUsd ?? ""}`).join("|");
 
   const [edgePeek, setEdgePeek] = useState<{ edgeId: string; x: number; y: number } | null>(null);
+
+  // Ghost preview of the currently-checked edit-diff subset (Chat Copilot).
+  const activeEdits: EditChange[] = useMemo(
+    () =>
+      editProposal
+        ? editProposal.changes.filter((c) => editChecked[c.id] && c.depends_on.every((d) => editChecked[d]))
+        : [],
+    [editProposal, editChecked],
+  );
+  const editPreview = useMemo(() => (activeEdits.length ? previewOf(activeEdits) : null), [activeEdits]);
 
   const nodes: Node[] = useMemo(() => {
     if (!pipeline) return [];
@@ -105,7 +118,10 @@ function Flow() {
     }
 
     const metrics = nodeMetrics(steps, agentRunTraces, teamRunTraces);
-    return pipeline.nodes.map((n) => {
+    const removeIds = editPreview?.removeNodeIds ?? new Set<string>();
+    const maxX = Math.max(0, ...pipeline.nodes.map((n) => n.position.x));
+
+    const real: Node[] = pipeline.nodes.map((n) => {
       let sourceBadge: { label: string; meta: string } | undefined;
       if (n.source) {
         const ds = n.source.datasetId ? datasets.find((d) => d.id === n.source!.datasetId) : undefined;
@@ -124,12 +140,31 @@ function Flow() {
           sourceBadge,
           dropTarget: n.id === dropTargetId,
           runMeta: metric ? { durationMs: metric.durationMs, costUsd: metric.costUsd } : undefined,
+          removing: removeIds.has(n.id),
         },
         selected: n.id === selectedNodeId,
       };
     });
+
+    // Ghosted (dashed) nodes for add_nodes in the checked subset, placed near their wiring.
+    const ghosts: Node[] = (editPreview?.ghostNodes ?? [])
+      .filter((g) => !pipeline.nodes.some((n) => n.id === g.id))
+      .map((g, i) => {
+        const inc = editPreview!.addEdges.find((e) => e.target === g.id && pipeline.nodes.some((n) => n.id === e.source));
+        const src = inc && pipeline.nodes.find((n) => n.id === inc.source);
+        const position = src ? { x: src.position.x + 300, y: src.position.y + 70 } : { x: maxX + 320, y: i * 130 };
+        return {
+          id: g.id,
+          type: "agent",
+          position,
+          data: { ...(g as unknown as Record<string, unknown>), ghost: true },
+          selectable: false,
+          draggable: false,
+        };
+      });
+    return [...real, ...ghosts];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeList, statusSig, selectedNodeId, datasetSig, pathKey, dropTargetId, agentSig, runningAgentId, metricSig, teamCostSig]);
+  }, [nodeList, statusSig, selectedNodeId, datasetSig, pathKey, dropTargetId, agentSig, runningAgentId, metricSig, teamCostSig, editPreview]);
 
   const edges: Edge[] = useMemo(() => {
     if (!pipeline) return [];
@@ -148,7 +183,8 @@ function Flow() {
     }
 
     const statusOf = new Map(pipeline.nodes.map((n) => [n.id, n.status]));
-    return pipeline.edges.map((e) => {
+    const removeEdgeSet = new Set((editPreview?.removeEdges ?? []).map((e) => `${e.source}>${e.target}`));
+    const realEdges: Edge[] = pipeline.edges.map((e) => {
       const src = pipeline.nodes.find((n) => n.id === e.source);
       const color = hexFor({ color: src?.color, type: src?.type });
       const animated =
@@ -168,11 +204,23 @@ function Flow() {
         source: e.source,
         target: e.target,
         type: "data",
-        data: { color, label: e.label, animated, contractColor },
+        data: { color, label: e.label, animated, contractColor, removing: removeEdgeSet.has(`${e.source}>${e.target}`) },
       };
     });
+
+    // Dashed ghost edges for add_edges in the checked subset.
+    const ghostEdges: Edge[] = (editPreview?.addEdges ?? [])
+      .filter((e) => !pipeline.edges.some((x) => x.source === e.source && x.target === e.target))
+      .map((e, i) => ({
+        id: `ghost-e-${e.source}-${e.target}-${i}`,
+        source: e.source,
+        target: e.target,
+        type: "data",
+        data: { color: "#34d399", ghost: true },
+      }));
+    return [...realEdges, ...ghostEdges];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipeline?.edges, runStatus, runningNodeId, statusSig, pathKey]);
+  }, [pipeline?.edges, runStatus, runningNodeId, statusSig, pathKey, editPreview]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {

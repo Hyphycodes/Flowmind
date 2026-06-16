@@ -4,6 +4,7 @@ You receive:
 - `pipeline`: the current pipeline JSON (nodes, edges, teams).
 - `request`: what the person wants changed (e.g. "add a fact-checker after the writer", "make the three research agents run in parallel", "this is too expensive — use a cheaper model for the extractor").
 - `remixAction` (optional): a structural preset — one of `decompose | add_critic | parallelize | route_models | add_source | add_checkpoint`. When present, interpret the request as that move applied to the target node.
+- `selectedNodeId` (optional): the node the person currently has selected. When the request or preset has a natural target, treat this node as that target.
 
 A pipeline node has: `id`, `type` (input | agent | tool | transformer | evaluator | output), `title`, `role`, `prompt`, `model`, `inputs[]`, `outputs[]`, and optionally a `team` (a crew of agents with a `strategy`). An edge has `source` and `target` node ids and an optional `dataKey`.
 

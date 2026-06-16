@@ -42,6 +42,7 @@ import type { Dataset } from "@/lib/datasets/schema";
 import type { EffortLevel } from "@/lib/pipeline/effort";
 import { coordinateTeamNode } from "@/lib/pipeline/teamCoordinator";
 import { descendantsOf } from "@/lib/pipeline/graph";
+import { applyChangesToPipeline, type EditChange, type EditProposal } from "@/lib/pipeline/editDiff";
 import { canEnterTeam } from "@/lib/pipeline/teamView";
 import { newId } from "@/lib/pipeline/validate";
 import { enrichDataset, datasetFromTable, tableFromDataset } from "@/lib/datasets/utils";
@@ -131,6 +132,11 @@ interface PipelineState {
   explainAudience: ExplainAudience;
   explainText: string | null;
 
+  /** Chat Copilot: pending edit-diff proposal (approve-then-apply, never auto-mutates). */
+  editProposal: EditProposal | null;
+  editChecked: Record<string, boolean>;
+  editing: boolean;
+
   /** Export system */
   exportOpen: boolean;
   exporting: boolean;
@@ -208,6 +214,12 @@ interface PipelineState {
   cancelRemix: () => void;
   addProductVariation: (variation: ProductVariation) => void;
   explain: (audience: ExplainAudience) => void;
+
+  /** Chat Copilot — edit by talking (diff proposal → checkmark approval → mechanical apply) */
+  proposeEdit: (request: string, opts?: { remixAction?: string }) => Promise<void>;
+  toggleEditChange: (id: string) => void;
+  applyEditProposal: (which: "selected" | "all") => void;
+  discardEditProposal: () => void;
 
   /** Export system */
   openExport: () => void;
@@ -309,6 +321,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     remixing: false,
     explainAudience: "founder",
     explainText: null,
+    editProposal: null,
+    editChecked: {},
+    editing: false,
     exportOpen: false,
     exporting: false,
     exportHealth: null,
@@ -849,6 +864,86 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       if (!p || !drop || !reality) return;
       set({ explainAudience: audience, explainText: explainProductBlueprint(p, drop, reality, audience) });
     },
+
+    /* ── Chat Copilot — edit by talking ───────────────────────────────── */
+
+    proposeEdit: async (request, opts = {}) => {
+      const p = get().pipeline;
+      if (!p || get().editing) return;
+      if (!request.trim() && !opts.remixAction) return;
+      set({ editing: true, notice: null });
+      try {
+        const res = await fetch("/api/edit-pipeline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pipeline: p, request, remixAction: opts.remixAction, selectedNodeId: get().selectedNodeId ?? undefined }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          set({ notice: j.error ?? "Couldn't propose edits." });
+          return;
+        }
+        const changes: EditChange[] = Array.isArray(j.changes) ? j.changes : [];
+        if (changes.length === 0) {
+          set({ notice: "No changes needed — the pipeline already does that." });
+          return;
+        }
+        const checked: Record<string, boolean> = {};
+        for (const c of changes) checked[c.id] = true;
+        set({ editProposal: { changes }, editChecked: checked });
+      } catch (err) {
+        set({ notice: (err as Error)?.message ?? "Couldn't propose edits." });
+      } finally {
+        set({ editing: false });
+      }
+    },
+
+    toggleEditChange: (id) =>
+      set((s) => {
+        if (!s.editProposal) return {};
+        const next = { ...s.editChecked, [id]: !s.editChecked[id] };
+        // Unchecking a parent disables (unchecks) any change that depends on it.
+        if (!next[id]) {
+          for (const c of s.editProposal.changes) {
+            if (c.depends_on.includes(id)) next[c.id] = false;
+          }
+        }
+        return { editChecked: next };
+      }),
+
+    applyEditProposal: (which) => {
+      const { editProposal: proposal, editChecked, pipeline: p } = get();
+      if (!proposal || !p) return;
+      const selectedIds = new Set(
+        proposal.changes.filter((c) => (which === "all" ? true : editChecked[c.id])).map((c) => c.id),
+      );
+      // Respect depends_on: a change only applies if all its parents are also applying.
+      const toApply = proposal.changes.filter(
+        (c) => selectedIds.has(c.id) && c.depends_on.every((d) => selectedIds.has(d)),
+      );
+      if (toApply.length === 0) {
+        set({ notice: "Nothing selected to apply." });
+        return;
+      }
+      // One undo snapshot for the whole proposal (the diff reverts in a single ⌘Z).
+      pushHistory(p);
+      const { pipeline: next, applied, skipped } = applyChangesToPipeline(p, toApply);
+      set({
+        pipeline: applyStatuses(next, () => "idle"),
+        editProposal: null,
+        editChecked: {},
+        selectedNodeId: null,
+        inspectorOpen: false,
+        notice:
+          skipped.length > 0
+            ? `Applied ${applied.length} change${applied.length === 1 ? "" : "s"}; skipped ${skipped.length} that would break the graph. ⌘Z to undo.`
+            : `Applied ${applied.length} change${applied.length === 1 ? "" : "s"}. ⌘Z to undo.`,
+      });
+      get().refreshProduct();
+      scheduleSave();
+    },
+
+    discardEditProposal: () => set({ editProposal: null, editChecked: {} }),
 
     /* ── Export system ────────────────────────────────────────────────── */
 

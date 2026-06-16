@@ -5,6 +5,7 @@ import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { EXPORT_MODES } from "@/lib/export/schema";
 import { EFFORT_LEVELS, EFFORT_HINTS, EFFORT_LABELS } from "@/lib/pipeline/effort";
+import { getRemixAction } from "@/lib/product/remix";
 
 const CHIPS = [
   "Jarvis-style recommendation engine",
@@ -14,23 +15,22 @@ const CHIPS = [
   "Sales lead qualifier",
 ];
 
-/** Maps a natural-language command to a remix action id (deterministic foundation). */
-const REMIX_INTENTS: [RegExp, string][] = [
-  [/premium|fire|luxur/, "make_premium"],
-  [/cheaper|cheap|budget|cheaper models/, "make_cheaper"],
-  [/smarter|stronger|more accurate|accurate/, "make_smarter"],
-  [/faster|speed/, "make_faster"],
-  [/eval|judge|score the output/, "add_evaluator"],
-  [/approval|human.*(gate|review|approve)/, "add_approval"],
-  [/input studio|stronger inputs|add.*dataset|reusable data/, "add_input_studio"],
-  [/client.?ready|client/, "make_client_ready"],
-  [/saas|subscription|productize/, "turn_into_saas"],
-  [/add.*ui|ui preview|add a ui/, "add_ui"],
+/** The 6 structural Remix moves — they route through the same /api/edit-pipeline diff flow. */
+const REMIX_MOVES: { id: string; label: string }[] = [
+  { id: "add_critic", label: "Add a critic" },
+  { id: "parallelize", label: "Parallelize" },
+  { id: "route_models", label: "Route models" },
+  { id: "add_checkpoint", label: "Add checkpoint" },
+  { id: "decompose", label: "Decompose" },
+  { id: "add_source", label: "Add source" },
 ];
 
 export function CommandBar() {
   const generate = usePipelineStore((s) => s.generate);
   const generating = usePipelineStore((s) => s.generating);
+  const proposeEdit = usePipelineStore((s) => s.proposeEdit);
+  const editing = usePipelineStore((s) => s.editing);
+  const editProposal = usePipelineStore((s) => s.editProposal);
   const effort = usePipelineStore((s) => s.effort);
   const setEffort = usePipelineStore((s) => s.setEffort);
   const notice = usePipelineStore((s) => s.notice);
@@ -41,12 +41,13 @@ export function CommandBar() {
   const setPanelTab = usePipelineStore((s) => s.setPanelTab);
   const setSourceMode = usePipelineStore((s) => s.setSourceMode);
   const startRemix = usePipelineStore((s) => s.startRemix);
-  const explain = usePipelineStore((s) => s.explain);
   const openExport = usePipelineStore((s) => s.openExport);
   const runExport = usePipelineStore((s) => s.runExport);
   const rerunTeam = usePipelineStore((s) => s.rerunTeam);
   const [text, setText] = useState("");
 
+  const hasPipeline = Boolean(pipeline && pipeline.nodes.length > 0);
+  const busy = generating || editing;
   const selectedNode = selectedNodeId ? pipeline?.nodes.find((n) => n.id === selectedNodeId) : undefined;
   const isTeam = Boolean(selectedNode?.team && (selectedNode.team.agents.length ?? 0) > 0);
   const isSource = Boolean(
@@ -57,6 +58,7 @@ export function CommandBar() {
         selectedNode.type === "input" ||
         selectedNode.type === "tool"),
   );
+
   const teamChips: { label: string; run: () => void }[] = selectedNode
     ? [
         { label: "Make this team smarter", run: () => startRemix("make_smarter") },
@@ -75,7 +77,14 @@ export function CommandBar() {
         { label: "Use a previous Take", run: () => setSourceMode(selectedNode.id, "previous_take") },
       ]
     : [];
-  const contextChips = isTeam ? teamChips : isSource ? sourceChips : null;
+  // On an existing pipeline (no special node), surface the structural Remix moves as edit proposals.
+  const remixChips: { label: string; run: () => void }[] = hasPipeline
+    ? REMIX_MOVES.map((m) => ({
+        label: m.label,
+        run: () => void proposeEdit(getRemixAction(m.id)?.instruction ?? m.label, { remixAction: m.id }),
+      }))
+    : [];
+  const contextChips = isTeam ? teamChips : isSource ? sourceChips : hasPipeline ? remixChips : null;
 
   useEffect(() => {
     if (!notice) return;
@@ -85,13 +94,10 @@ export function CommandBar() {
 
   const submit = (value?: string) => {
     const v = (value ?? text).trim();
-    if (!v || generating) return;
-
-    // Deterministic intent routing: remix / product commands act on the current
-    // pipeline; everything else generates a new one.
+    if (!v || busy) return;
     const lower = v.toLowerCase();
 
-    // Export intents (independent of the imperative-verb gate below).
+    // Export intents act on the current pipeline (not an edit).
     if (pipeline && /\bexport\b|bounce everything|client blueprint|founder brief|implementation plan|developer package/.test(lower)) {
       setText("");
       if (/bounce everything|export all|everything/.test(lower)) void runExport([...EXPORT_MODES]);
@@ -99,35 +105,10 @@ export function CommandBar() {
       return;
     }
 
-    const isCommand = /^(make|add|turn|use|reduce|compress|split|show|explain|compare)\b/.test(lower) || /\bthis\b/.test(lower);
-    if (pipeline && isCommand) {
-      if (/explain/.test(lower)) {
-        setText("");
-        setPanelTab("build");
-        explain("founder");
-        return;
-      }
-      if (/missing|reality|how buildable/.test(lower)) {
-        setText("");
-        setPanelTab("build");
-        setNotice("Product structure is in the Build tab.");
-        return;
-      }
-      if (/compare.*take|compare the last/.test(lower)) {
-        setText("");
-        setPanelTab("run");
-        return;
-      }
-      const remix = REMIX_INTENTS.find(([re]) => re.test(lower));
-      if (remix) {
-        setText("");
-        startRemix(remix[1]);
-        return;
-      }
-    }
-
     setText("");
-    void generate(v);
+    // Blank pipeline → generate from scratch. Existing pipeline → propose a reviewable edit diff.
+    if (hasPipeline) void proposeEdit(v);
+    else void generate(v);
   };
 
   return (
@@ -145,6 +126,11 @@ export function CommandBar() {
           <Loader2 size={12} className="animate-spin text-violet" />
           Designing teams, source data, and the product preview…
         </div>
+      ) : editing ? (
+        <div className="pointer-events-auto flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-ink-dim glass-strong fm-fade-up">
+          <Loader2 size={12} className="animate-spin text-violet" />
+          Working out the change…
+        </div>
       ) : null}
 
       <div className="pointer-events-auto w-full max-w-2xl">
@@ -159,54 +145,61 @@ export function CommandBar() {
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Describe the AI system you want to build…"
+            placeholder={hasPipeline ? "Tell the copilot what to change…" : "Describe the AI system you want to build…"}
             className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
           />
-          <select
-            value={effort}
-            onChange={(e) => setEffort(e.target.value as typeof effort)}
-            disabled={generating}
-            title={`Effort · ${EFFORT_HINTS[effort]}`}
-            aria-label="Generation effort"
-            className="h-8 shrink-0 cursor-pointer rounded-lg border border-line bg-white/[0.03] px-2 text-[11px] font-medium text-ink-dim outline-none transition hover:text-ink disabled:opacity-50"
-          >
-            {EFFORT_LEVELS.map((lvl) => (
-              <option key={lvl} value={lvl} className="bg-[#14141c] text-ink">
-                {EFFORT_LABELS[lvl]}
-              </option>
-            ))}
-          </select>
+          {/* Effort sizes from-scratch generation only; on an existing pipeline edits ignore it. */}
+          {!hasPipeline && (
+            <select
+              value={effort}
+              onChange={(e) => setEffort(e.target.value as typeof effort)}
+              disabled={busy}
+              title={`Effort · ${EFFORT_HINTS[effort]}`}
+              aria-label="Generation effort"
+              className="h-8 shrink-0 cursor-pointer rounded-lg border border-line bg-white/[0.03] px-2 text-[11px] font-medium text-ink-dim outline-none transition hover:text-ink disabled:opacity-50"
+            >
+              {EFFORT_LEVELS.map((lvl) => (
+                <option key={lvl} value={lvl} className="bg-[#14141c] text-ink">
+                  {EFFORT_LABELS[lvl]}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             type="submit"
-            disabled={generating || !text.trim()}
+            disabled={busy || !text.trim()}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet text-white transition hover:bg-violet/90 disabled:opacity-40"
-            aria-label="Generate pipeline"
+            aria-label={hasPipeline ? "Propose change" : "Generate pipeline"}
           >
-            {generating ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={16} />}
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={16} />}
           </button>
         </form>
-        <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-          {contextChips
-            ? contextChips.map((c) => (
-                <button
-                  key={c.label}
-                  onClick={c.run}
-                  className="flex items-center gap-1 rounded-full border border-violet/30 bg-violet/[0.06] px-3 py-1 text-xs text-violet transition hover:bg-violet/[0.12]"
-                >
-                  <Sparkles size={11} /> {c.label}
-                </button>
-              ))
-            : CHIPS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => submit(c)}
-                  disabled={generating}
-                  className="rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
-                >
-                  {c}
-                </button>
-              ))}
-        </div>
+        {/* Hide the chips while a proposal is open so the focus is the diff. */}
+        {!editProposal && (
+          <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+            {contextChips
+              ? contextChips.map((c) => (
+                  <button
+                    key={c.label}
+                    onClick={c.run}
+                    disabled={busy}
+                    className="flex items-center gap-1 rounded-full border border-violet/30 bg-violet/[0.06] px-3 py-1 text-xs text-violet transition hover:bg-violet/[0.12] disabled:opacity-50"
+                  >
+                    <Sparkles size={11} /> {c.label}
+                  </button>
+                ))
+              : CHIPS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => submit(c)}
+                    disabled={busy}
+                    className="rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
+                  >
+                    {c}
+                  </button>
+                ))}
+          </div>
+        )}
       </div>
     </div>
   );

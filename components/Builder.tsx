@@ -20,6 +20,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { PipelineCanvas } from "@/components/canvas/PipelineCanvas";
 import { NodePopover } from "@/components/canvas/NodePopover";
 import { CommandBar } from "@/components/command/CommandBar";
+import { DiffProposalPanel } from "@/components/command/DiffProposalPanel";
 import { NodeInspector } from "@/components/panels/NodeInspector";
 import { OutputPanel } from "@/components/panels/OutputPanel";
 import { InputStudioPanel } from "@/components/panels/InputStudioPanel";
@@ -136,6 +137,7 @@ export function Builder() {
             <NodePopover />
             <NodeInspector />
             <CommandBar />
+            <DiffProposalPanel />
             <InputStudioPanel />
             <RemixProposalModal />
             <ExportDialog />
