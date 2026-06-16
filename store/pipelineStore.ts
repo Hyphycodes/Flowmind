@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { getDemoRun, type DemoLevel } from "@/lib/demo/cachedRun";
 import {
   pipelineSchema,
   pipelineNodeSchema,
@@ -180,6 +181,17 @@ interface PipelineState {
   effort: EffortLevel;
   notice: string | null;
 
+  /** Read-only public demo (the /try canvas). When true: no persistence, no AI/network calls;
+   *  runPipeline replays cached data instead of streaming a real run. */
+  demoMode: boolean;
+  demoLevel: DemoLevel;
+  /** Seed the canvas from the cached demo run at `level` (no network). */
+  enterDemoMode: (level: DemoLevel) => void;
+  /** Bloom between the simple single-agent shape and the deep nested-teams shape. */
+  setDemoLevel: (level: DemoLevel) => void;
+  /** Animate the cached run from stored replay timing (no AI call). */
+  playDemoReplay: () => void;
+
   setActivePipeline: (p: Pipeline, run?: RunTrace | null) => void;
   selectNode: (id: string | null) => void;
   openInspector: (id?: string) => void;
@@ -321,9 +333,19 @@ const NODE_KIND_COLOR: Record<PipelineNode["type"], "cyan" | "violet" | "blue" |
 };
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let demoTimers: ReturnType<typeof setTimeout>[] = [];
+function clearDemoTimers() {
+  for (const t of demoTimers) clearTimeout(t);
+  demoTimers = [];
+}
 
 export const usePipelineStore = create<PipelineState>((set, get) => {
   const scheduleSave = () => {
+    // Demo canvas is read-only and ephemeral — never persist its mutations.
+    if (get().demoMode) {
+      set({ saveStatus: "local" });
+      return;
+    }
     if (!hasSupabase()) {
       set({ saveStatus: "local" });
       return;
@@ -413,6 +435,123 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     generating: false,
     effort: "balanced",
     notice: null,
+    demoMode: false,
+    demoLevel: "simple",
+
+    enterDemoMode: (level) => {
+      clearDemoTimers();
+      const demo = getDemoRun(level);
+      set({ demoMode: true, demoLevel: level });
+      // Seed the canvas in an idle state (no run yet); replay fills it on demand.
+      get().setActivePipeline(applyStatuses(demo.pipeline, () => "idle"), null);
+    },
+
+    setDemoLevel: (level) => {
+      if (!get().demoMode || get().demoLevel === level) return;
+      clearDemoTimers();
+      const demo = getDemoRun(level);
+      set({
+        demoLevel: level,
+        runStatus: "idle",
+        runningNodeId: null,
+        runningTeamId: null,
+        runningAgentId: null,
+        steps: [],
+        tables: [],
+        finalOutput: null,
+        activeRunTrace: null,
+        handoffPackets: [],
+        packetWarnings: [],
+        teamRunTraces: [],
+        agentRunTraces: [],
+        selectedNodeId: null,
+        inspectorOpen: false,
+        teamPath: [],
+        pipeline: applyStatuses(demo.pipeline, () => "idle"),
+      });
+    },
+
+    playDemoReplay: () => {
+      if (!get().demoMode || get().runStatus === "running") return;
+      const demo = getDemoRun(get().demoLevel);
+      const { pipeline: p, run, replay } = demo;
+      clearDemoTimers();
+      set({
+        runStatus: "running",
+        runError: null,
+        runningNodeId: null,
+        runningTeamId: null,
+        runningAgentId: null,
+        runStartedAt: new Date().toISOString(),
+        finalOutput: null,
+        activeRunTrace: null,
+        tables: [],
+        handoffPackets: [],
+        packetWarnings: [],
+        teamRunTraces: [],
+        agentRunTraces: [],
+        selectedPacketId: null,
+        selectedTeamTraceId: null,
+        steps: p.nodes.map((n) => ({ nodeId: n.id, title: n.title, status: "idle" as const, durationMs: 0 })),
+        pipeline: applyStatuses(p, () => "idle"),
+        panelTab: "run",
+        panelOpen: true,
+      });
+      // Compress the real timings into a snappy replay; node activation order is preserved.
+      const SCALE = 0.18;
+      for (const rs of replay) {
+        const startDelay = rs.startMs * SCALE;
+        const dur = Math.max(200, rs.durationMs * SCALE);
+        demoTimers.push(
+          setTimeout(() => {
+            if (!get().demoMode) return;
+            const cur = get().pipeline;
+            set({
+              runningNodeId: rs.nodeId,
+              ...(cur ? { pipeline: applyStatuses(cur, (n) => (n.id === rs.nodeId ? "running" : n.status)) } : {}),
+            });
+            set((s) => ({ steps: s.steps.map((st) => (st.nodeId === rs.nodeId ? { ...st, status: "running" } : st)) }));
+          }, startDelay),
+        );
+        demoTimers.push(
+          setTimeout(() => {
+            if (!get().demoMode) return;
+            const newTables = run.tables.filter((t) => t.sourceNodeId === rs.nodeId);
+            set((s) => {
+              const have = new Set(s.tables.map((t) => t.id));
+              const merged = [...s.tables, ...newTables.filter((t) => !have.has(t.id))];
+              return {
+                runningNodeId: s.runningNodeId === rs.nodeId ? null : s.runningNodeId,
+                pipeline: s.pipeline ? applyStatuses(s.pipeline, (n) => (n.id === rs.nodeId ? "success" : n.status)) : s.pipeline,
+                steps: s.steps.map((st) =>
+                  st.nodeId === rs.nodeId ? { ...st, status: "success", durationMs: rs.durationMs, costUsd: rs.costUsd } : st,
+                ),
+                tables: merged,
+              };
+            });
+          }, startDelay + dur),
+        );
+      }
+      const total = replay.reduce((m, rs) => Math.max(m, rs.startMs + rs.durationMs), 0) * SCALE + 260;
+      demoTimers.push(
+        setTimeout(() => {
+          if (!get().demoMode) return;
+          set({
+            runStatus: "success",
+            runningNodeId: null,
+            runningTeamId: null,
+            runningAgentId: null,
+            activeRunTrace: run,
+            tables: run.tables,
+            finalOutput: run.finalOutput ?? null,
+            handoffPackets: run.packets,
+            steps: run.steps,
+            teamRunTraces: run.teamRuns ?? [],
+            agentRunTraces: run.agentRuns ?? [],
+          });
+        }, total),
+      );
+    },
 
     setActivePipeline: (p, run) => {
       const stepStatus = new Map((run?.steps ?? []).map((s) => [s.nodeId, s.status]));
@@ -1281,6 +1420,8 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     },
 
     generate: async (description, effort, opts = {}) => {
+      // The public demo never calls the AI endpoint — explore freely, sign up to build.
+      if (get().demoMode) return;
       if (!description.trim() || get().generating) return;
       const level = effort ?? get().effort;
       set({ generating: true, notice: null, clarify: null });
@@ -1328,6 +1469,11 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     runPipeline: async (options = {}) => {
       const p = get().pipeline;
       if (!p || get().runStatus === "running") return;
+      // In the demo, "run" replays cached data — never hits /api/run.
+      if (get().demoMode) {
+        get().playDemoReplay();
+        return;
+      }
       const scoped = Boolean(options.onlyNodeId || options.fromNodeId);
       // Replay-from-here: the node + its downstream descendants; upstream is seeded, not re-run.
       const subset = options.fromNodeId ? descendantsOf(p, options.fromNodeId) : null;
