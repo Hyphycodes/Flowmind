@@ -278,6 +278,7 @@ interface PipelineState {
   saveTrigger: (trigger: Trigger) => Promise<void>;
   removeTrigger: (id: string) => Promise<void>;
   toggleTrigger: (id: string) => Promise<void>;
+  runTriggerNow: (id: string) => Promise<void>;
   openUpgrade: (gate: FeatureGateResult & { title?: string }) => void;
   closeUpgrade: () => void;
   runExport: (modes: ExportMode[]) => Promise<void>;
@@ -1216,6 +1217,22 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       const next: Trigger = { ...t, enabled: !t.enabled, updatedAt: new Date().toISOString() };
       set((s) => ({ triggers: s.triggers.map((x) => (x.id === id ? next : x)) }));
       if (hasSupabase()) await upsertTrigger(next);
+    },
+
+    runTriggerNow: async (id) => {
+      set({ notice: "Firing trigger…" });
+      try {
+        const res = await fetch("/api/automation/run-trigger", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ triggerId: id }),
+        });
+        const j = await res.json().catch(() => ({}));
+        set({ notice: res.ok ? `Trigger fired — run ${String(j.status ?? "")}.` : j.error ?? "Couldn't run the trigger." });
+      } catch (err) {
+        set({ notice: (err as Error)?.message ?? "Couldn't run the trigger." });
+      }
+      await get().hydrateTriggers();
     },
 
     openUpgrade: (gate) => set({ upgradeGate: gate }),

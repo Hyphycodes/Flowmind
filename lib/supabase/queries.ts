@@ -10,7 +10,7 @@ import { datasetSchema, type Dataset } from "@/lib/datasets/schema";
 import { builderPreferencesSchema, PREFERENCES_ID, type BuilderPreferences } from "@/lib/preferences/schema";
 import { libraryAssetSchema, type LibraryAsset } from "@/lib/library/schema";
 import { pipelineShareSchema, type PipelineShare } from "@/lib/sharing/schema";
-import { triggerSchema, type Trigger } from "@/lib/automation/schema";
+import { triggerSchema, triggerRunSchema, type Trigger, type TriggerRun } from "@/lib/automation/schema";
 import type { ExportManifest } from "@/lib/export/schema";
 import { getSupabase } from "./client";
 
@@ -553,10 +553,16 @@ export function rowToTrigger(r: Record<string, unknown>): Trigger | null {
       webhook: r.webhook ?? undefined,
       upstreamPipelineId: (r.upstream_pipeline_id as string | null) ?? undefined,
       defaultInputs: r.default_inputs ?? {},
+      retry: r.retry ?? undefined,
+      alerts: r.alerts ?? undefined,
       createdAt: r.created_at ?? new Date().toISOString(),
       updatedAt: r.updated_at ?? new Date().toISOString(),
       lastFiredAt: (r.last_fired_at as string | null) ?? undefined,
       lastStatus: (r.last_status as string | null) ?? undefined,
+      retryAttempt: (r.retry_attempt as number | null) ?? undefined,
+      nextRetryAt: (r.next_retry_at as string | null) ?? undefined,
+      lastError: (r.last_error as string | null) ?? undefined,
+      alertedFailure: (r.alerted_failure as boolean | null) ?? undefined,
     });
   } catch {
     return null;
@@ -574,10 +580,44 @@ export function triggerToRow(t: Trigger): Record<string, unknown> {
     webhook: t.webhook ?? null,
     upstream_pipeline_id: t.upstreamPipelineId ?? null,
     default_inputs: t.defaultInputs,
+    retry: t.retry ?? null,
+    alerts: t.alerts ?? null,
     last_fired_at: t.lastFiredAt ?? null,
     last_status: t.lastStatus ?? null,
     updated_at: new Date().toISOString(),
   };
+}
+
+export async function listTriggerRuns(triggerId: string, limit = 20): Promise<TriggerRun[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("trigger_runs")
+    .select("*")
+    .eq("trigger_id", triggerId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).flatMap((r) => {
+    try {
+      return [
+        triggerRunSchema.parse({
+          id: r.id,
+          triggerId: r.trigger_id,
+          runId: (r.run_id as string | null) ?? undefined,
+          status: r.status ?? "unknown",
+          attempt: (r.attempt as number | null) ?? 1,
+          durationMs: (r.duration_ms as number | null) ?? undefined,
+          costUsd: (r.cost_usd as number | null) ?? undefined,
+          error: (r.error as string | null) ?? undefined,
+          startedAt: (r.started_at as string | null) ?? undefined,
+          createdAt: r.created_at ?? new Date().toISOString(),
+        }),
+      ];
+    } catch {
+      return [];
+    }
+  });
 }
 
 export async function listTriggers(pipelineId?: string): Promise<Trigger[]> {

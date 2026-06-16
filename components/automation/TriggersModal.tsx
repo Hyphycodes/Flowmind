@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Clock, Copy, GitMerge, Trash2, Webhook, X, Zap } from "lucide-react";
+import { Bell, Check, Clock, Copy, GitMerge, History, Play, RotateCw, Trash2, Webhook, X, Zap } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { hasSupabase } from "@/lib/supabase/client";
-import { listPipelines, type PipelineSummary } from "@/lib/supabase/queries";
+import { listPipelines, listTriggerRuns, type PipelineSummary } from "@/lib/supabase/queries";
 import { newId } from "@/lib/pipeline/validate";
-import { triggerSchema, type Trigger, type TriggerType } from "@/lib/automation/schema";
+import { triggerSchema, type Trigger, type TriggerRun, type TriggerType } from "@/lib/automation/schema";
 import { CRON_PRESETS, cronPreview, isValidCron, nextFire } from "@/lib/automation/cron";
-import { timeAgo } from "@/lib/ui/format";
+import { formatDuration, formatUsd, timeAgo } from "@/lib/ui/format";
 import { cn } from "@/lib/ui/cn";
 
 const TYPE_META: Record<TriggerType, { label: string; icon: typeof Clock }> = {
@@ -26,9 +26,17 @@ export function TriggersModal() {
   const saveTrigger = usePipelineStore((s) => s.saveTrigger);
   const removeTrigger = usePipelineStore((s) => s.removeTrigger);
   const toggleTrigger = usePipelineStore((s) => s.toggleTrigger);
+  const runTriggerNow = usePipelineStore((s) => s.runTriggerNow);
 
   const [addType, setAddType] = useState<TriggerType>("schedule");
   const [pipelines, setPipelines] = useState<PipelineSummary[]>([]);
+  const [alertUrl, setAlertUrl] = useState("");
+
+  // Wrap creation so a (shared, optional) alert webhook is attached to whatever trigger is created.
+  const create = (t: Trigger) =>
+    void saveTrigger(
+      alertUrl.trim() ? { ...t, alerts: { webhookUrl: alertUrl.trim(), events: ["failure", "recovery"] } } : t,
+    );
 
   useEffect(() => {
     if (!open) return;
@@ -67,6 +75,7 @@ export function TriggersModal() {
                   pipelineName={pipelines.find((p) => p.id === t.upstreamPipelineId)?.name}
                   onToggle={() => void toggleTrigger(t.id)}
                   onDelete={() => void removeTrigger(t.id)}
+                  onRunNow={() => void runTriggerNow(t.id)}
                 />
               ))}
             </div>
@@ -91,11 +100,23 @@ export function TriggersModal() {
                 );
               })}
             </div>
-            {addType === "schedule" && <ScheduleForm pipelineId={pipeline.id} onCreate={saveTrigger} />}
-            {addType === "webhook" && <WebhookForm pipeline={pipeline} onCreate={saveTrigger} />}
+            {addType === "schedule" && <ScheduleForm pipelineId={pipeline.id} onCreate={create} />}
+            {addType === "webhook" && <WebhookForm pipeline={pipeline} onCreate={create} />}
             {addType === "pipeline" && (
-              <PipelineForm pipelineId={pipeline.id} pipelines={pipelines} onCreate={saveTrigger} />
+              <PipelineForm pipelineId={pipeline.id} pipelines={pipelines} onCreate={create} />
             )}
+
+            <label className="mt-3 block">
+              <span className="mb-1 flex items-center gap-1.5 text-[11px] text-ink-faint">
+                <Bell size={11} /> Alert webhook (optional — Slack/Discord/Zapier)
+              </span>
+              <input
+                value={alertUrl}
+                onChange={(e) => setAlertUrl(e.target.value)}
+                placeholder="https://hooks.slack.com/…"
+                className="w-full rounded-lg border border-line bg-black/30 px-2.5 py-1.5 font-mono text-[11px] text-ink outline-none focus:border-line-strong"
+              />
+            </label>
           </div>
         </div>
       </div>
@@ -108,11 +129,13 @@ function TriggerRow({
   pipelineName,
   onToggle,
   onDelete,
+  onRunNow,
 }: {
   trigger: Trigger;
   pipelineName?: string;
   onToggle: () => void;
   onDelete: () => void;
+  onRunNow: () => void;
 }) {
   const Icon = TYPE_META[t.type].icon;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -125,18 +148,27 @@ function TriggerRow({
         ? "Webhook endpoint"
         : `After ${pipelineName ?? "another pipeline"}`;
   const [copied, setCopied] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const url = t.type === "webhook" && t.webhook ? `${origin}/api/hooks/${t.webhook.token}` : "";
+  const failing = t.lastStatus === "error";
 
   return (
-    <div className={cn("rounded-xl border p-3", t.enabled ? "border-line bg-white/[0.02]" : "border-line bg-white/[0.01] opacity-60")}>
+    <div className={cn("rounded-xl border p-3", t.enabled ? (failing ? "border-red/30 bg-red/[0.04]" : "border-line bg-white/[0.02]") : "border-line bg-white/[0.01] opacity-60")}>
       <div className="flex items-center gap-2.5">
         <Icon size={15} className="shrink-0 text-violet" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[12.5px] font-medium text-ink">{summary}</div>
-          <div className="text-[10.5px] text-ink-faint">
-            {t.lastFiredAt ? `last fired ${timeAgo(t.lastFiredAt)} · ${t.lastStatus ?? ""}` : "not fired yet"}
+          <div className="flex flex-wrap items-center gap-x-1.5 text-[10.5px]">
+            <span className={failing ? "text-red" : "text-ink-faint"}>
+              {t.lastFiredAt ? `fired ${timeAgo(t.lastFiredAt)} · ${t.lastStatus ?? ""}` : "not fired yet"}
+            </span>
+            {t.nextRetryAt && <span className="text-gold">· retry queued</span>}
+            {t.alerts?.webhookUrl && <Bell size={9} className="text-ink-faint" />}
           </div>
         </div>
+        <button onClick={onRunNow} title="Run now" className="shrink-0 text-ink-faint transition hover:text-ink">
+          <Play size={13} className="fill-current" />
+        </button>
         <button
           onClick={onToggle}
           title={t.enabled ? "Disable" : "Enable"}
@@ -148,6 +180,9 @@ function TriggerRow({
           <Trash2 size={14} />
         </button>
       </div>
+
+      {failing && t.lastError && <p className="mt-1.5 line-clamp-2 text-[10.5px] text-red/90">{t.lastError}</p>}
+
       {url && (
         <div className="mt-2 flex items-center gap-2">
           <input readOnly value={url} className="flex-1 truncate rounded-lg border border-line bg-black/30 px-2.5 py-1.5 font-mono text-[10.5px] text-ink-dim" />
@@ -163,6 +198,52 @@ function TriggerRow({
           </button>
         </div>
       )}
+
+      <div className="mt-2 flex items-center gap-3 text-[10.5px]">
+        <button onClick={() => setShowHistory((v) => !v)} className="flex items-center gap-1 text-ink-faint transition hover:text-ink">
+          <History size={11} /> History
+        </button>
+        {failing && (
+          <button onClick={onRunNow} className="flex items-center gap-1 text-violet transition hover:brightness-110">
+            <RotateCw size={11} /> Retry now
+          </button>
+        )}
+      </div>
+
+      {showHistory && <TriggerHistory triggerId={t.id} />}
+    </div>
+  );
+}
+
+function TriggerHistory({ triggerId }: { triggerId: string }) {
+  const [runs, setRuns] = useState<TriggerRun[] | null>(hasSupabase() ? null : []);
+  useEffect(() => {
+    let cancelled = false;
+    if (hasSupabase()) void listTriggerRuns(triggerId).then((r) => !cancelled && setRuns(r));
+    return () => {
+      cancelled = true;
+    };
+  }, [triggerId]);
+
+  if (runs === null) return <p className="mt-2 text-[10.5px] text-ink-faint">Loading history…</p>;
+  if (runs.length === 0) return <p className="mt-2 text-[10.5px] text-ink-faint">No firings recorded yet.</p>;
+  const ok = runs.filter((r) => r.status === "success").length;
+
+  return (
+    <div className="mt-2 space-y-1 rounded-lg border border-line bg-black/20 p-2">
+      <div className="text-[10px] uppercase tracking-wide text-ink-faint">
+        {runs.length} firings · {ok} ok · {runs.length - ok} failed
+      </div>
+      {runs.slice(0, 8).map((r) => (
+        <div key={r.id} className="flex items-center gap-2 text-[10.5px]">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: r.status === "success" ? "#34d399" : "#f87171" }} />
+          <span className="text-ink-dim">{timeAgo(r.createdAt)}</span>
+          {r.attempt > 1 && <span className="text-gold">·a{r.attempt}</span>}
+          <span className="text-ink-faint">{formatDuration(r.durationMs ?? 0)}</span>
+          {r.costUsd != null && <span className="text-ink-faint">{formatUsd(r.costUsd)}</span>}
+          {r.error && <span className="min-w-0 flex-1 truncate text-red/80">{r.error}</span>}
+        </div>
+      ))}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { getServerSupabase } from "@/lib/supabase/server";
 import { rowToTrigger } from "@/lib/supabase/queries";
-import { runPipelineHeadless } from "@/lib/run/headless";
+import { fireTrigger } from "@/lib/automation/fire";
 import { safeApiError } from "@/lib/api/guards";
 
 export const runtime = "nodejs";
@@ -65,7 +65,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   );
 
   try {
-    const trace = await runPipelineHeadless({ pipelineId: trigger.pipelineId, inputs, source: "webhook", triggerId: trigger.id });
+    const trace = await fireTrigger(trigger, { inputs, source: "webhook" });
     if (!trace) return Response.json({ error: "Pipeline not found." }, { status: 404 });
     return Response.json({ runId: trace.id, status: trace.status, finalOutput: trace.finalOutput });
   } catch (err) {

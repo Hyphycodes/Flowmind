@@ -70,3 +70,27 @@ they appear in `listRuns` and the Command Center activity feed, tagged by source
 - Webhooks are rate-limited per token; the tick is `CRON_SECRET`-gated in production.
 - Triggered runs respect the same run engine (and, when billing is enabled, the same metering on
   the interactive path; headless metering attribution is a follow-up in the billing layer).
+
+## Observability (Prompt 06b)
+
+Unattended runs need to be trustworthy. `lib/automation/fire.ts → fireTrigger` wraps the headless
+run with:
+
+- **Per-firing history.** Each firing writes a `trigger_runs` row (status, duration, cost, attempt,
+  error). The Triggers modal shows a health view per trigger (counts + recent firings), and the
+  Command Center shows an automation-health tile + highlights failing triggers.
+- **Auto-retry with backoff.** A failed run retries with bounded backoff (`RETRY_BACKOFF_MINUTES` =
+  ~1m, 5m, 15m) up to `retry.maxAttempts` (default 3). Retries are driven by the same cron tick
+  (`next_retry_at <= now`). Deterministic failures (invalid input/schema/not-found/etc.) are
+  detected and **not** retried. A retry that succeeds resolves the alert; exhaustion escalates.
+- **Alerts + dedupe.** On exhausted failure, an outbound webhook alert (Slack/Discord/Zapier
+  incoming-webhook compatible) POSTs a compact JSON payload (pipeline, trigger, error, attempt,
+  runId, deep link). The `alerted_failure` flag dedupes repeat failures; a **recovery** alert is
+  sent when a previously-failing trigger succeeds again. Email is config-gated on a transactional
+  provider — set `RESEND_API_KEY` (+ optional `ALERTS_EMAIL_FROM`) to enable it; otherwise email is
+  a no-op (no new dependency, webhook is the baseline channel).
+- **Manual controls.** `POST /api/automation/run-trigger` powers "run now" and "retry last failed"
+  from the trigger health view; pause/resume is the enable toggle. All reuse the headless core.
+
+Extra env: `RESEND_API_KEY`, `ALERTS_EMAIL_FROM` (email alerts), `NEXT_PUBLIC_APP_URL` (deep links
+in alerts). Apply migration `0014_automation_observability.sql`.

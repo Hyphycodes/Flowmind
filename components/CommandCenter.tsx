@@ -13,6 +13,7 @@ import {
   Plus,
   Sparkles,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { PipelineCard } from "@/components/pipelines/PipelineCard";
@@ -21,9 +22,11 @@ import {
   getLatestRun,
   listPipelines,
   listRuns,
+  listTriggers,
   type PipelineSummary,
   type RunSummary,
 } from "@/lib/supabase/queries";
+import type { Trigger } from "@/lib/automation/schema";
 import { formatUsd, timeAgo } from "@/lib/ui/format";
 import { withAlpha } from "@/lib/ui/colors";
 
@@ -44,17 +47,20 @@ export function CommandCenter() {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [runInfo, setRunInfo] = useState<Record<string, RunInfo | null>>({});
   const [costsLoading, setCostsLoading] = useState(false);
+  const [triggers, setTriggers] = useState<Trigger[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [pl, rn] = await Promise.all([
+      const [pl, rn, tg] = await Promise.all([
         hasSupabase() ? listPipelines() : Promise.resolve([]),
         hasSupabase() ? listRuns(40) : Promise.resolve([]),
+        hasSupabase() ? listTriggers() : Promise.resolve([]),
       ]);
       if (cancelled) return;
       setPipelines(pl);
       setRuns(rn);
+      setTriggers(tg);
       // Per-pipeline latest run gives cost + authoritative status; fetch progressively, bounded.
       if (pl.length && hasSupabase()) {
         setCostsLoading(true);
@@ -103,6 +109,10 @@ export function CommandCenter() {
       .sort((a, b) => b.cost - a.cost)
       .slice(0, 6);
   }, [pipelines, runInfo]);
+
+  const enabledTriggers = triggers.filter((t) => t.enabled).length;
+  const failingTriggers = triggers.filter((t) => t.lastStatus === "error");
+  const retriesInFlight = triggers.filter((t) => t.nextRetryAt).length;
 
   const date = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
@@ -163,6 +173,33 @@ export function CommandCenter() {
               accent={needsAttention.length ? "#f87171" : "#6f7088"}
             />
           </section>
+
+          {/* Automation health */}
+          {triggers.length > 0 && (
+            <section>
+              <SectionTitle icon={Zap} title="Automation health" />
+              <div className="grid grid-cols-3 gap-3">
+                <MiniStat label="Triggers" value={String(enabledTriggers)} sub="enabled" />
+                <MiniStat label="Failing" value={String(failingTriggers.length)} tone={failingTriggers.length ? "#f87171" : undefined} />
+                <MiniStat label="Retries queued" value={String(retriesInFlight)} tone={retriesInFlight ? "#f5c451" : undefined} />
+              </div>
+              {failingTriggers.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                  {failingTriggers.slice(0, 4).map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => open(t.pipelineId)}
+                      className="flex w-full items-center gap-2 rounded-lg border border-red/25 bg-red/[0.05] px-3 py-2 text-left transition hover:bg-red/[0.09]"
+                    >
+                      <Zap size={13} className="shrink-0 text-red" />
+                      <span className="min-w-0 flex-1 truncate text-[12px] text-ink">{nameOf(t.pipelineId)} — automation failing</span>
+                      <span className="shrink-0 text-[10px] text-ink-faint">{t.nextRetryAt ? "retry queued" : timeAgo(t.lastFiredAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           {/* Needs attention */}
           {needsAttention.length > 0 && (
@@ -297,6 +334,18 @@ function Tile({
       </div>
       <div className="mt-2.5 text-[26px] font-semibold leading-none text-ink">{value}</div>
       {sub ? <div className="mt-1.5 text-[11px]">{sub}</div> : null}
+    </div>
+  );
+}
+
+function MiniStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-white/[0.02] p-3">
+      <div className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</div>
+      <div className="mt-1 text-[18px] font-semibold text-ink" style={tone ? { color: tone } : undefined}>
+        {value}
+      </div>
+      {sub ? <div className="text-[10px] text-ink-faint">{sub}</div> : null}
     </div>
   );
 }
