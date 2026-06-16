@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Braces, Loader2, Play, Route } from "lucide-react";
+import { AlertTriangle, Braces, Gauge, Loader2, Play, Route } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { packetTimeline } from "@/lib/packets/packetUtils";
 import { ACCENT_HEX, isAccent } from "@/lib/ui/colors";
@@ -11,6 +11,7 @@ import { UIPreview } from "./UIPreview";
 import { DatasetPanel } from "./DatasetPanel";
 import { TakesPanel } from "./TakesPanel";
 import { RunTimeline } from "./RunTimeline";
+import { OptimizePanel } from "./OptimizePanel";
 import { ProductPanel } from "./ProductPanel";
 
 const TABS = [
@@ -153,6 +154,12 @@ function RunTab() {
               <section>
                 <h3 className="mb-2 text-[12px] font-medium text-ink">Timeline</h3>
                 <RunTimeline />
+              </section>
+              <section>
+                <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-ink">
+                  <Gauge size={13} className="text-green" /> Optimize
+                </h3>
+                <OptimizePanel />
               </section>
               <PacketTab />
               <TakesPanel />
