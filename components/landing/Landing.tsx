@@ -18,56 +18,119 @@ import {
 /** The public front door (Task 08). Leads with the two things Flowmind actually wins on:
  *  you can DEBUG it and you OWN it. Honest only — no invented logos, quotes, or metrics. Fully
  *  responsive (this is opened on phones, unlike the canvas editor). */
-export function Landing() {
+export function Landing({ signedIn = false, appHref = "/editor" }: { signedIn?: boolean; appHref?: string }) {
+  // Primary CTA flips by session (Prompt 15): logged out → Try the demo; logged in → straight to work.
+  const primaryLabel = signedIn ? "Open Flowmind" : "Try it now";
+
   return (
     <div className="flow-canvas min-h-screen overflow-x-hidden text-ink">
       {/* Nav */}
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5 sm:px-8">
         <span className="font-display text-[24px] italic leading-none tracking-tight text-ink">flowmind</span>
         <div className="flex items-center gap-2">
-          <Link href="/login" className="rounded-lg px-3 py-1.5 text-[13px] text-ink-dim transition hover:text-ink">
-            Sign in
-          </Link>
-          <Link href="/signup" className="rounded-lg bg-violet px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:bg-violet/90">
-            Start building
-          </Link>
+          {signedIn ? (
+            <Link href={appHref} className="flex items-center gap-1.5 rounded-lg bg-violet px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:bg-violet/90">
+              Open Flowmind <ArrowRight size={14} />
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="rounded-lg px-3 py-1.5 text-[13px] text-ink-dim transition hover:text-ink">
+                Log in
+              </Link>
+              <Link href="/try" className="rounded-lg bg-violet px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:bg-violet/90">
+                Try it now
+              </Link>
+            </>
+          )}
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-12 pt-10 sm:px-8 lg:grid-cols-2 lg:gap-8 lg:pt-20">
+      {/* Hero — lead with the hook; category is the subhead (Prompt 16) */}
+      <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pb-10 pt-10 sm:px-8 lg:grid-cols-2 lg:gap-8 lg:pt-20">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-line bg-white/[0.03] px-3 py-1 text-[11.5px] text-ink-dim">
-            <Sparkles size={12} className="text-violet" /> AI System Design Studio
+            <Sparkles size={12} className="text-violet" /> Runs on real Claude — real outputs, not mocked
           </span>
-          <h1 className="mt-4 font-display text-[40px] italic leading-[1.05] tracking-tight text-ink sm:text-[52px]">
-            Build, <span className="text-violet">debug</span>, and <span className="text-violet">own</span> multi-agent AI systems.
-          </h1>
-          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-dim">
-            Describe a system in a sentence, watch it assemble as a node-and-team graph, run it with real Claude, and
-            see exactly what every agent did. For builders, automation freelancers &amp; agencies, and teams.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center gap-2.5">
-            <Link
-              href="/signup"
-              className="flex items-center gap-1.5 rounded-xl bg-violet px-4 py-2.5 text-[14px] font-medium text-white transition hover:bg-violet/90"
-            >
-              Start building <ArrowRight size={15} />
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-xl border border-line-strong bg-white/[0.04] px-4 py-2.5 text-[14px] font-medium text-ink transition hover:bg-white/[0.1]"
-            >
-              Sign in
-            </Link>
-          </div>
+          {signedIn ? (
+            <>
+              <h1 className="mt-4 font-display text-[40px] italic leading-[1.05] tracking-tight text-ink sm:text-[52px]">
+                Welcome back.
+              </h1>
+              <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-dim">
+                Your studio is one click away — pick up where you left off, no scrolling required.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                <Link
+                  href={appHref}
+                  className="flex items-center gap-1.5 rounded-xl bg-violet px-5 py-3 text-[14px] font-medium text-white transition hover:bg-violet/90"
+                >
+                  Open Flowmind <ArrowRight size={15} />
+                </Link>
+                <Link
+                  href="/try"
+                  className="rounded-xl border border-line-strong bg-white/[0.04] px-4 py-2.5 text-[14px] font-medium text-ink transition hover:bg-white/[0.1]"
+                >
+                  Replay the demo
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="mt-4 font-display text-[40px] italic leading-[1.04] tracking-tight text-ink sm:text-[54px]">
+                Damn, you can <span className="text-violet">see the brain.</span>
+              </h1>
+              <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-dim">
+                Build, debug, and own multi-agent AI systems. Describe one in a sentence, watch it assemble as a
+                node-and-team graph, run it on real Claude, and see exactly what every agent did.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                <Link
+                  href="/try"
+                  className="flex items-center gap-1.5 rounded-xl bg-violet px-5 py-3 text-[14px] font-medium text-white transition hover:bg-violet/90"
+                >
+                  Try it now <ArrowRight size={15} />
+                </Link>
+                <Link
+                  href="/login"
+                  className="rounded-xl border border-line-strong bg-white/[0.04] px-4 py-2.5 text-[14px] font-medium text-ink transition hover:bg-white/[0.1]"
+                >
+                  Log in
+                </Link>
+              </div>
+              <p className="mt-3 text-[12px] text-ink-faint">No sign-up to explore the live demo.</p>
+            </>
+          )}
         </motion.div>
 
-        <CanvasHero />
+        <Link href="/try" className="group block" aria-label="Open the live demo">
+          <CanvasHero />
+        </Link>
       </section>
 
-      {/* The two differentiators */}
-      <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
+      {/* Playable demo, high on the page (Prompt 16) */}
+      <section className="mx-auto max-w-6xl px-5 pb-4 pt-2 sm:px-8">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-line bg-white/[0.02] px-5 py-6 text-center sm:flex-row sm:justify-between sm:text-left">
+          <div>
+            <h2 className="font-display text-[20px] italic text-ink">Play with a real pipeline — right now.</h2>
+            <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-ink-dim">
+              Open a live multi-agent system on the real canvas: replay the run, read every prompt, peek the data
+              between agents, and watch it bloom from simple to advanced. No login, no setup.
+            </p>
+          </div>
+          <Link
+            href="/try"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl bg-violet px-4 py-2.5 text-[14px] font-medium text-white transition hover:bg-violet/90"
+          >
+            <Eye size={15} /> {primaryLabel === "Open Flowmind" ? "Open the demo" : "Try it now"}
+          </Link>
+        </div>
+      </section>
+
+      {/* ── What it does ─────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-5 pt-10 sm:px-8">
+        <BandLabel kicker="What it does" title="Describe it, debug it, own it." />
+      </section>
+      <section className="mx-auto max-w-6xl px-5 py-6 sm:px-8">
         <div className="grid gap-4 lg:grid-cols-2">
           <Differentiator
             icon={Eye}
@@ -86,9 +149,8 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Capability tour */}
-      <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
-        <h2 className="mb-6 text-center font-display text-[26px] italic text-ink">Everything to compose intelligence</h2>
+      {/* Capability tour (still "what it does") */}
+      <section className="mx-auto max-w-6xl px-5 pb-4 sm:px-8">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Capability icon={Bot} title="Build by describing it" body="A sentence becomes a pipeline. Refine it by talking — changes shown as a reviewable diff you approve." />
           <Capability icon={Users} title="Teams of agents" body="Nested team folders coordinate by strategy — sequential, parallel, debate, vote, router — for complex systems." />
@@ -97,8 +159,11 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Who it's for */}
-      <section className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
+      {/* ── Who it's for ─────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-6xl px-5 pt-10 sm:px-8">
+        <BandLabel kicker="Who it's for" title="Built for the people who ship agents." />
+      </section>
+      <section className="mx-auto max-w-6xl px-5 pb-12 pt-6 sm:px-8">
         <div className="grid gap-4 lg:grid-cols-3">
           <Audience icon={Workflow} title="Builders & indie hackers" body="Design sophisticated multi-agent systems and walk away with runnable code." />
           <Audience icon={Sparkles} title="Automation freelancers & agencies" body="Build and debug in front of a client, then hand off real ownership — or meter a hosted app." />
@@ -110,13 +175,13 @@ export function Landing() {
       <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:px-8">
         <h2 className="font-display text-[32px] italic leading-tight text-ink sm:text-[40px]">Damn, you can see the brain.</h2>
         <p className="mx-auto mt-3 max-w-md text-[14px] leading-relaxed text-ink-dim">
-          Describe → generate → run → inspect → export. Start with one pipeline.
+          Describe → generate → run → inspect → export, all on real Claude. Start with one pipeline.
         </p>
         <Link
-          href="/signup"
+          href={signedIn ? appHref : "/try"}
           className="mx-auto mt-6 inline-flex items-center gap-1.5 rounded-xl bg-violet px-5 py-3 text-[14px] font-medium text-white transition hover:bg-violet/90"
         >
-          Start building <ArrowRight size={15} />
+          {primaryLabel} <ArrowRight size={15} />
         </Link>
       </section>
 
@@ -125,8 +190,14 @@ export function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-5 py-6 text-[12px] text-ink-faint sm:flex-row sm:px-8">
           <span className="font-display text-[16px] italic text-ink-dim">flowmind</span>
           <div className="flex items-center gap-4">
-            <Link href="/login" className="transition hover:text-ink">Sign in</Link>
-            <Link href="/signup" className="transition hover:text-ink">Start building</Link>
+            {signedIn ? (
+              <Link href={appHref} className="transition hover:text-ink">Open Flowmind</Link>
+            ) : (
+              <>
+                <Link href="/login" className="transition hover:text-ink">Log in</Link>
+                <Link href="/try" className="transition hover:text-ink">Try it now</Link>
+              </>
+            )}
           </div>
         </div>
       </footer>
@@ -245,6 +316,15 @@ function Differentiator({
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+function BandLabel({ kicker, title }: { kicker: string; title: string }) {
+  return (
+    <div className="border-b border-line/60 pb-3">
+      <span className="text-[11.5px] font-medium uppercase tracking-[0.14em] text-violet">{kicker}</span>
+      <h2 className="mt-1 font-display text-[24px] italic leading-tight text-ink sm:text-[28px]">{title}</h2>
     </div>
   );
 }

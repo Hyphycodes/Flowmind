@@ -5,13 +5,15 @@ import { Landing } from "@/components/landing/Landing";
 
 export const runtime = "nodejs";
 
-/** Bare `/`. Logged-out visitors see the landing page when auth is enabled; everyone else — the
- *  public demo (auth off) and signed-in users — goes straight to the Command Center. Existing
- *  users are never gated behind the marketing page. */
+/** The post-login app surface — the studio canvas, which loads the user's latest pipeline. */
+const APP_HREF = "/editor";
+
+/** Bare `/`. When auth is OFF (the public demo), the studio Command Center is the front door.
+ *  When auth is ON, `/` is the marketing landing for BOTH audiences — session is detected
+ *  server-side (no flicker) so logged-out visitors get the sales hero + "Try it now", and
+ *  signed-in users get a returning-user hero + a one-click "Open Flowmind →". */
 export default async function Home() {
-  if (authEnabled()) {
-    const user = await getCurrentUser();
-    if (!user) return <Landing />;
-  }
-  return <CommandCenter />;
+  if (!authEnabled()) return <CommandCenter />;
+  const user = await getCurrentUser();
+  return <Landing signedIn={Boolean(user)} appHref={APP_HREF} />;
 }
