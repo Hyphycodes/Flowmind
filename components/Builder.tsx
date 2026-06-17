@@ -28,6 +28,7 @@ import { OutputPanel } from "@/components/panels/OutputPanel";
 import { InputStudioPanel } from "@/components/panels/InputStudioPanel";
 import { RemixProposalModal } from "@/components/product/RemixProposalModal";
 import { ExportDialog } from "@/components/export/ExportDialog";
+import { ImportModal } from "@/components/import/ImportModal";
 import { ShareModal } from "@/components/sharing/ShareModal";
 import { TriggersModal } from "@/components/automation/TriggersModal";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
@@ -148,6 +149,7 @@ export function Builder() {
             <InputStudioPanel />
             <RemixProposalModal />
             <ExportDialog />
+            <ImportModal />
             <ShareModal />
             <TriggersModal />
             <UpgradeModal />
@@ -179,6 +181,7 @@ const FIRST_RUN_IDEAS = [
 function EmptyCanvas() {
   const generate = usePipelineStore((s) => s.generate);
   const generating = usePipelineStore((s) => s.generating);
+  const openImport = usePipelineStore((s) => s.openImport);
 
   return (
     <div className="flow-canvas flex h-full w-full items-center justify-center">
@@ -188,8 +191,9 @@ function EmptyCanvas() {
         </div>
         <h1 className="font-display text-[34px] italic leading-tight text-ink">What are we building?</h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-dim">
-          Describe an AI product. Flowmind creates the teams, source data, output tables, preview,
-          and a shippable blueprint.
+          Describe an AI product, or <button onClick={openImport} className="text-violet underline-offset-2 hover:underline">import existing code</button> to
+          render your current AI system as a pipeline. Flowmind creates the teams, source data, output
+          tables, preview, and a shippable blueprint.
         </p>
 
         <div className="mt-5 flex flex-wrap justify-center gap-1.5">

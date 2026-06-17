@@ -278,6 +278,11 @@ interface PipelineState {
   insertLibraryNode: (assetId: string) => void;
   applyPromptToSelected: (prompt: string, assetId?: string) => void;
 
+  /** Import (Prompt 21) — folder/repo → visual pipeline */
+  importOpen: boolean;
+  openImport: () => void;
+  closeImport: () => void;
+
   /** Export system */
   openShare: () => void;
   closeShare: () => void;
@@ -430,6 +435,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     exporting: false,
     exportHealth: null,
     lastExportManifest: null,
+    importOpen: false,
     upgradeGate: null,
     saveStatus: "idle",
     generating: false,
@@ -1332,6 +1338,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     },
 
     /* ── Export system ────────────────────────────────────────────────── */
+
+    openImport: () => set({ importOpen: true }),
+    closeImport: () => set({ importOpen: false }),
 
     openExport: () => {
       const p = get().pipeline;
