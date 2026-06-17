@@ -17,37 +17,12 @@ import type {
 import type { Dataset } from "@/lib/datasets/schema";
 import type { EvalResult } from "@/lib/evals/schema";
 import { newId } from "@/lib/pipeline/validate";
-import { MODELS } from "@/lib/models/providers";
-import { recommendModelForAgent, recommendModelForNode } from "@/lib/models/recommend";
-import { TOOLS } from "@/lib/tools/registry";
-import { compareTakes, summarizeRunCost } from "@/lib/takes/build";
 import { generateProductDrop } from "@/lib/product/productDrop";
 import { calculateRealityMeter } from "@/lib/product/realityMeter";
 import { generateProductBrief } from "@/lib/product/brief";
-import { packetTimeline } from "@/lib/packets/packetUtils";
-import {
-  apiDocsMd,
-  clientBlueprintMd,
-  deriveEnvExample,
-  founderBriefMd,
-  implementationPlanMd,
-  modelRouterNotesMd,
-  productBriefMd,
-  readmeMd,
-  specMd,
-  type DocsContext,
-} from "./docs";
-import {
-  FLOWMIND_RUNTIME_TS,
-  MODEL_ADAPTERS_TS,
-  RUN_PIPELINE_TS,
-  RUNTIME_TYPES_TS,
-  TSCONFIG_JSON,
-  exampleInputJson,
-  exampleOutputJson,
-  packageJson,
-  toolAdaptersTs,
-} from "./runtime";
+import { type DocsContext } from "./docs";
+import { buildDevBundle } from "./devBundle";
+import { founderBriefHtml, clientBlueprintHtml } from "./visualDocs";
 import { buildExportHealthCheck } from "./healthCheck";
 import { assertNoSecretsInExport } from "@/lib/security/secrets";
 import {
@@ -81,17 +56,6 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "pipeline";
 }
 
-const SCHEMA_DESCRIPTORS: Record<string, { description: string; fields: string[] }> = {
-  pipeline: { description: "The full pipeline graph.", fields: ["id", "name", "nodes[]", "edges[]", "outputTables[]", "uiBindings[]", "blueprint", "realityMeter"] },
-  dataset: { description: "An Input Studio dataset.", fields: ["id", "name", "mode", "schema[]", "rows[]", "qualityScore", "scenarioTags[]"] },
-  "output-table": { description: "Structured data a node produces.", fields: ["id", "name", "sourceNodeId", "columns[]", "rows[]"] },
-  "ui-binding": { description: "Connects a table to a UI component.", fields: ["id", "tableId", "componentType", "title", "fields[]"] },
-  "handoff-packet": { description: "Slim output a team hands downstream.", fields: ["packetId", "fromNodeId", "toNodeId", "summary", "keyFields", "confidence", "fieldChanges"] },
-  tool: { description: "A tool/API definition.", fields: ["id", "name", "category", "authType", "requiredEnv[]", "inputSchema[]", "outputSchema[]"] },
-  model: { description: "A model provider config.", fields: ["id", "provider", "displayName", "capabilities[]", "contextTokens", "inputCostPerM", "outputCostPerM", "wired"] },
-  "run-trace": { description: "A full execution record.", fields: ["id", "status", "steps[]", "tables[]", "teamRuns[]", "agentRuns[]", "packets[]", "evalResults[]", "costUsd", "latencyMs"] },
-};
-
 /** A single generated export file (path + raw text). Reused by the ZIP path and the
  *  GitHub repo-export path so export logic is never duplicated. */
 export type ExportFile = { path: string; content: string; type: ExportFileType; description?: string };
@@ -113,7 +77,7 @@ export function collectExportFiles(
   const developer = has("developer");
   const tables = run?.tables ?? p.outputTables;
   const datasets = run?.datasets ?? [];
-  const takes = run?.takes ?? [];
+  const slug = slugify(drop.name);
 
   const out: ExportFile[] = [];
   const files: ExportManifestFile[] = [];
@@ -123,125 +87,27 @@ export function collectExportFiles(
     out.push({ path, content, type: inferType(path), description });
     files.push({ path, type: inferType(path), description });
   };
-  const json = (path: string, value: unknown, description?: string) => put(path, JSON.stringify(value, null, 2), description);
 
-  // ── always-on core ──
-  put("README.md", readmeMd(docsCtx), "How to use this export");
-  put("SPEC.md", specMd(docsCtx), "Human-readable architecture spec");
-  put(".env.example", deriveEnvExample(p), "Required env vars (no secret values)");
-  put("package.json", packageJson(p, slugify(drop.name)), "Run with: npm install && npm start");
-  put("tsconfig.json", TSCONFIG_JSON);
+  // Three audience-matched tiers (Prompt 22). The old export dumped ~40 internal-representation
+  // files; these are clean and useful: a runnable dev bundle, a founder PDF, a client blueprint.
 
-  // ── developer package ──
+  // ── Developer bundle — a self-contained, single-import, runnable package at the root ──
   if (developer) {
-    json("pipeline/pipeline.json", p, "The validated pipeline graph");
-    json("pipeline/product-blueprint.json", p.blueprint ?? null);
-    json("pipeline/product-drop.json", drop);
-    json("pipeline/reality-meter.json", reality);
-    json("pipeline/source-brain-surface.json", {
-      source: p.nodes.filter((n) => n.layer === "source" || n.type === "input" || n.type === "tool").map((n) => n.title),
-      brain: p.nodes.filter((n) => n.team || (n.layer === "brain")).map((n) => n.title),
-      surface: p.nodes.filter((n) => n.layer === "surface" || n.type === "output").map((n) => n.title),
-    });
-
-    for (const [name, d] of Object.entries(SCHEMA_DESCRIPTORS)) json(`schemas/${name}.schema.json`, d);
-
-    for (const n of p.nodes) {
-      json(`agents/${n.id}.json`, {
-        id: n.id, type: n.type, title: n.title, role: n.role, prompt: n.prompt,
-        model: n.model, modelSelection: n.modelSelection ?? null, toolAttachments: n.toolAttachments,
-        inputs: n.inputs, outputs: n.outputs, team: n.team ?? null,
-      });
-    }
-    for (const n of p.nodes) {
-      if (!n.team) continue;
-      json(`crews/${n.id}.json`, { nodeId: n.id, title: n.title, strategy: n.team.strategy, lead: n.team.lead ?? null, agents: n.team.agents, internalEdges: n.team.internalEdges });
-    }
-
-    json("tools/tool-definitions.json", TOOLS);
-    json("tools/tool-attachments.json", p.nodes.map((n) => ({ nodeId: n.id, attachments: n.toolAttachments, teamAttachments: n.team?.toolAttachments ?? [] })));
-    json("tools/tool-traces.json", run?.toolTraces ?? run?.runTrace?.toolTraces ?? []);
-
-    // Google Drive (no tokens — those stay encrypted, server-side, in connected_accounts).
-    if (p.nodes.some((n) => n.source?.mode === "google_drive")) {
-      json("tools/google-drive.json", TOOLS.filter((t) => t.id.startsWith("google_")));
-      json(
-        "source-configs/google-drive-sources.json",
-        p.nodes
-          .filter((n) => n.source?.mode === "google_drive")
-          .map((n) => ({ nodeId: n.id, title: n.title, drive: n.source?.drive ?? null })),
-      );
-    }
-
-    json("models/model-providers.json", Array.from(new Set(MODELS.map((m) => m.provider))));
-    json("models/model-definitions.json", MODELS);
-    json("models/model-selections.json", p.nodes.map((n) => ({ nodeId: n.id, nodeTitle: n.title, selection: n.modelSelection ?? null, agentSelections: n.team?.agents.map((a) => ({ agentId: a.id, selection: a.modelSelection ?? null })) ?? [] })));
-    json("models/model-recommendations.json", p.nodes.map((n) => ({
-      nodeId: n.id,
-      recommendation: recommendModelForNode({ nodeId: n.id, nodeType: n.type, role: n.role || n.title, structuredOutputRequired: true, toolUsageRequired: Boolean(n.source?.toolId || n.toolAttachments.length), wiredOnly: true }),
-      agentRecommendations: n.team?.agents.map((a) => recommendModelForAgent({ nodeId: n.id, agentId: a.id, nodeType: n.type, role: a.role || n.role, structuredOutputRequired: true, toolUsageRequired: Boolean(a.toolAttachments.length), wiredOnly: true })) ?? [],
-    })));
-    put("models/model-router-notes.md", modelRouterNotesMd(p));
-
-    json("datasets/datasets.json", datasets);
-    json("datasets/dataset-schemas.json", datasets.map((d) => ({ id: d.id, name: d.name, mode: d.mode, rowCount: d.rows.length, qualityScore: d.qualityScore ?? null, scenarioTags: d.scenarioTags, requiredFields: d.requiredFields, schema: d.schema })));
-    json("datasets/source-configs.json", p.nodes.filter((n) => n.source).map((n) => ({ nodeId: n.id, title: n.title, ...n.source })));
-    json("datasets/scenario-sets.json", p.scenarioSets ?? []);
-
-    json("contracts/data-contracts.json", p.edges.filter((e) => e.contract).map((e) => ({ id: e.id, fromNodeId: e.source, toNodeId: e.target, ...e.contract })));
-    json("contracts/field-mappings.json", p.fieldMappings ?? []);
-    json("contracts/contract-warnings.json", run?.packetWarnings ?? []);
-
-    json("packets/handoff-packets.json", run?.packets ?? []);
-    json("packets/packet-timeline.json", run?.packets ? packetTimeline(p, run.packets) : []);
-    json("packets/field-drift-warnings.json", run?.packetWarnings ?? []);
-
-    json("tables/output-tables.json", p.outputTables);
-    json("tables/latest-output-tables.json", tables);
-
-    json("ui/ui-bindings.json", p.uiBindings);
-    json("ui/preview-config.json", p.uiBindings.map((b) => ({ id: b.id, componentType: b.componentType, title: b.title, tableId: b.tableId, fields: b.fields })));
-    json("ui/preview-data.json", p.uiBindings.slice().sort((a, b) => a.position - b.position).map((b) => {
-      const t = tables.find((x) => x.id === b.tableId);
-      return { componentType: b.componentType, title: b.title, poweredBy: b.tableId, fields: b.fields, columns: t?.columns ?? [], sampleRows: t?.rows.slice(0, 5) ?? [] };
-    }));
-
-    json("runs/latest-run-trace.json", run?.runTrace ?? null);
-    json("runs/team-runs.json", run?.teamRuns ?? []);
-    json("runs/agent-runs.json", run?.agentRuns ?? []);
-    json("runs/tool-traces.json", run?.toolTraces ?? run?.runTrace?.toolTraces ?? []);
-    json("runs/cost-trace.json", run?.runTrace ? summarizeRunCost(run.runTrace) : { totalCostUsd: 0, totalLatencyMs: 0, warningCount: 0, modelsUsed: [] });
-
-    json("takes/takes.json", takes);
-    json("takes/take-comparison.json", takes.length ? compareTakes(takes) : { rows: [], dimensions: [] });
-
-    const evalResults = run?.evalResults ?? run?.runTrace?.evalResults ?? [];
-    json("evals/eval-scores.json", evalResults);
-    json("evals/eval-summary.json", { count: evalResults.length, overall: evalResults.find((r) => r.nodeId === "__overall__")?.overall ?? null, byNode: evalResults.map((r) => ({ nodeId: r.nodeId, overall: r.overall, verdict: r.verdict })) });
-
-    json("product/product-variations.json", p.productVariations ?? []);
-    json("product/remix-proposals.json", p.remixProposals ?? []);
-    put("product/product-brief.md", productBriefMd(brief));
+    for (const f of buildDevBundle(p, tables, slug)) put(f.path, f.content, f.description);
+  } else {
+    // No dev bundle selected → a short root README so the ZIP isn't bare.
+    put(
+      "README.md",
+      `# ${drop.name}\n\n${drop.pitch || p.description}\n\nThis export contains the document(s) you selected — open the \`.html\` file(s) and use **Print → Save as PDF**.\n`,
+      "Overview",
+    );
   }
 
-  // ── runtime package ──
-  if (has("runtime") || developer) {
-    put("runtime/flowmind-runtime.ts", FLOWMIND_RUNTIME_TS, "Portable, dependency-free runtime");
-    put("runtime/run-pipeline.ts", RUN_PIPELINE_TS, "Runnable example: npm start");
-    put("runtime/types.ts", RUNTIME_TYPES_TS);
-    put("runtime/tool-adapters.ts", toolAdaptersTs(p), "Wire real tool/API calls here");
-    put("runtime/model-adapters.ts", MODEL_ADAPTERS_TS, "Wire your model provider here");
-    put("runtime/example-input.json", exampleInputJson(p));
-    put("runtime/example-output.json", exampleOutputJson(p, tables, run?.finalOutput ?? null));
-  }
+  // ── Founder brief — print-ready PDF (architecture + node purposes + prompt strategy) ──
+  if (has("founder_brief")) put("founder-brief.html", founderBriefHtml(docsCtx), "Founder brief — open, then Print → Save as PDF");
 
-  // ── docs ──
-  if (has("client_blueprint")) put("docs/client-blueprint.md", clientBlueprintMd(docsCtx), "Agency / client-ready overview");
-  if (has("founder_brief")) {
-    put("docs/founder-brief.md", founderBriefMd(docsCtx), "Is it worth building?");
-    put("docs/implementation-plan.md", implementationPlanMd(docsCtx), "Phased build plan");
-  }
-  if (has("api") || developer) put("docs/api-docs.md", apiDocsMd(docsCtx), "Hosted run endpoint docs");
+  // ── Client blueprint — visual, non-technical ──
+  if (has("client_blueprint")) put("client-blueprint.html", clientBlueprintHtml(docsCtx), "Client blueprint — open, then Print → Save as PDF");
 
   // ── manifest + health check (always last) ──
   const healthCheck = buildExportHealthCheck({ pipeline: p, datasets, hasRun: Boolean(run?.runTrace) });

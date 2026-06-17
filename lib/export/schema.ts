@@ -4,31 +4,35 @@
 export const EXPORT_MODES = ["developer", "client_blueprint", "founder_brief", "runtime", "api"] as const;
 export type ExportMode = (typeof EXPORT_MODES)[number];
 
+/** The three audience-matched tiers shown in the export drawer (Prompt 22). `runtime`/`api` remain
+ *  in EXPORT_MODES for back-compat with the health check, but are no longer user-facing options. */
+export const EXPORT_TIERS: ExportMode[] = ["developer", "founder_brief", "client_blueprint"];
+
 export const EXPORT_MODE_META: Record<ExportMode, { label: string; audience: string; description: string }> = {
   developer: {
-    label: "Developer Package",
-    audience: "builders",
-    description: "Machine-readable config, schemas, agents, crews, tools, datasets, traces + runnable example.",
+    label: "Developer bundle",
+    audience: "developers",
+    description: "A self-contained, runnable package: one entry point (runPipeline), package.json, README, and your agents/prompts. Drop it into a repo and run.",
   },
   client_blueprint: {
-    label: "Client Blueprint",
-    audience: "agencies / clients",
-    description: "A polished, sell-ready overview: what it does, team map, data, integrations, phases.",
+    label: "Client blueprint",
+    audience: "clients",
+    description: "A visual, non-technical overview of the system — what it does, step by step, and what you get. No prompts or model details.",
   },
   founder_brief: {
-    label: "Founder Brief",
+    label: "Founder brief (PDF)",
     audience: "founders",
-    description: "Is it worth building? MVP scope, monetization, fastest test, complexity, launch path.",
+    description: "A print-ready PDF: architecture diagram, each node's purpose in plain English, and the prompt strategy. Hand it to a developer.",
   },
   runtime: {
     label: "Runtime Package",
     audience: "integrators",
-    description: "run-pipeline.ts + a portable runtime, typed schemas, tool/model adapter stubs, example I/O.",
+    description: "Folded into the Developer bundle.",
   },
   api: {
     label: "Hosted API",
     audience: "integrators",
-    description: "API docs for POST /api/pipelines/{id}/run — request/response, env, curl + fetch examples.",
+    description: "API docs for the hosted run endpoint.",
   },
 };
 

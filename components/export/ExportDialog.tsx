@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Download, FileCheck2, GitBranch, GitPullRequest, Loader2, Minus, Package, TriangleAlert, X, XCircle } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { EXPORT_MODE_META, EXPORT_MODES, type ExportHealthStatus, type ExportMode } from "@/lib/export/schema";
+import { EXPORT_MODE_META, EXPORT_TIERS, type ExportHealthStatus, type ExportMode } from "@/lib/export/schema";
 import { GitHubExportPanel } from "@/components/github/GitHubExportPanel";
 import { GithubMark } from "@/components/github/GithubMark";
 import { CreditEstimate } from "@/components/billing/CreditEstimate";
@@ -42,7 +42,7 @@ export function ExportDialog() {
   const setNotice = usePipelineStore((s) => s.setNotice);
   const demoMode = usePipelineStore((s) => s.demoMode);
 
-  const [selected, setSelected] = useState<Set<ExportMode>>(new Set(EXPORT_MODES));
+  const [selected, setSelected] = useState<Set<ExportMode>>(new Set(EXPORT_TIERS));
   const [destination, setDestination] = useState<Destination>("download");
   const isGitHub = destination !== "download";
 
@@ -150,9 +150,9 @@ export function ExportDialog() {
             </div>
           )}
 
-          {/* Mode cards */}
+          {/* Tier cards — the three audience-matched exports (Prompt 22) */}
           <div className="space-y-1.5">
-            {EXPORT_MODES.map((m) => {
+            {EXPORT_TIERS.map((m) => {
               const meta = EXPORT_MODE_META[m];
               const on = selected.has(m);
               return (
@@ -233,7 +233,7 @@ export function ExportDialog() {
           ) : (
             <>
               <button
-                onClick={() => void runExport([...EXPORT_MODES])}
+                onClick={() => void runExport([...EXPORT_TIERS])}
                 disabled={exporting || blocked}
                 className="rounded-lg border border-line-strong bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-ink transition hover:bg-white/[0.1] disabled:opacity-50"
               >
