@@ -72,7 +72,7 @@ export function AuthCard({ mode }: { mode: "login" | "signup" }) {
         {!enabled ? (
           <div className="rounded-xl border border-gold/25 bg-gold/[0.06] p-3 text-[12px] leading-relaxed text-ink-dim">
             Accounts aren&apos;t enabled in this deployment yet. Flowmind runs as a public demo —
-            explore the builder and templates without signing in. To turn on accounts, configure
+            explore the builder without signing in. To turn on accounts, configure
             the Supabase Google provider and set <code className="font-mono text-[11px]">NEXT_PUBLIC_AUTH_ENABLED=true</code>.
             <Link href="/" className="mt-3 block text-violet hover:underline">Continue to the demo →</Link>
           </div>

@@ -212,12 +212,6 @@ function EmptyCanvas() {
           >
             <Sparkles size={13} /> Open the research crew demo
           </Link>
-          <Link
-            href="/templates"
-            className="rounded-lg border border-line-strong bg-white/[0.04] px-3 py-1.5 text-ink transition hover:bg-white/[0.1]"
-          >
-            Browse templates
-          </Link>
         </div>
         <p className="mt-4 text-[11px] text-ink-faint">…or describe your own in the command bar below.</p>
       </div>

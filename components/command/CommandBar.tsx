@@ -7,12 +7,13 @@ import { EXPORT_MODES } from "@/lib/export/schema";
 import { EFFORT_LEVELS, EFFORT_HINTS, EFFORT_LABELS } from "@/lib/pipeline/effort";
 import { getRemixAction } from "@/lib/product/remix";
 
+// Starter prompt chips (Prompt 18) — illustrative example prompts that teach the format and
+// showcase the generation engine. Not a catalog; rotating inspiration. None on the do-not-ship list.
 const CHIPS = [
-  "Research intelligence crew",
-  "Competitive analysis engine",
-  "Content repurposer",
-  "Inbox triage assistant",
-  "Sales lead qualifier",
+  "Research a topic with a crew of agents and write me a weekly brief.",
+  "Take a rough draft, critique it, and return a polished version.",
+  "Extract structured data from messy documents into a clean table.",
+  "Triage incoming support tickets and route them to the right specialist.",
 ];
 
 /** The 6 structural Remix moves — they route through the same /api/edit-pipeline diff flow. */
@@ -231,16 +232,22 @@ export function CommandBar() {
                     <Sparkles size={11} /> {c.label}
                   </button>
                 ))
-              : CHIPS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => submit(c)}
-                    disabled={busy}
-                    className="rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
-                  >
-                    {c}
-                  </button>
-                ))}
+              : !hasPipeline && (
+                  <>
+                    <span className="self-center pr-0.5 text-[11px] font-medium uppercase tracking-wide text-ink-faint">Try:</span>
+                    {CHIPS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => submit(c)}
+                        disabled={busy}
+                        title={c}
+                        className="max-w-[260px] truncate rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </>
+                )}
           </div>
         )}
       </div>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, LayoutDashboard, Layers, Library, LogIn, Play, Plus, Settings } from "lucide-react";
+import { LayoutDashboard, Layers, Library, LogIn, Play, Plus, Settings } from "lucide-react";
 import { UsageMeter } from "@/components/billing/UsageMeter";
 import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
 import { cn } from "@/lib/ui/cn";
@@ -11,7 +11,6 @@ import { cn } from "@/lib/ui/cn";
 const NAV = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/pipelines", label: "Pipelines", icon: Layers },
-  { href: "/templates", label: "Templates", icon: BookOpen },
   { href: "/library", label: "Library", icon: Library },
   { href: "/runs", label: "Runs", icon: Play },
   { href: "/settings", label: "Settings", icon: Settings },
