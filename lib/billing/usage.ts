@@ -230,3 +230,11 @@ export async function recordRunSpend(input: {
   });
   await incrementUsageCounter("realRuns", 1);
 }
+
+/** Count one AI design call against the EDITS pool (Prompt 20). Called ONLY after the AI call
+ *  succeeds — a failed edit/generation never consumes a credit (no refund logic needed because the
+ *  increment is success-gated). Metered by count, not token cost (cost-weighting is a future v2). */
+export async function recordEditSpend(): Promise<void> {
+  if (!billingEnabled()) return;
+  await incrementUsageCounter("edits", 1);
+}

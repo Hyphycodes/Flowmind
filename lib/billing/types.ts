@@ -26,6 +26,9 @@ export type Limit = number | "unlimited";
 export type PlanLimits = {
   savedPipelines: Limit;
   realRunsPerMonth: Limit;
+  /** Prompt 20: AI design calls (chat edits, remix moves, from-scratch generation) per month —
+   *  a separate pool from runs because the cost shape differs (one call vs. a whole pipeline run). */
+  editsPerMonth: Limit;
   inputStudioRowsPerMonth: Limit;
   exportsPerMonth: Limit;
   githubPrExportsPerMonth: Limit;
@@ -142,6 +145,8 @@ export type UsageEvent = {
 /** Per-period usage counters (keyed names match the meter + gate checks). */
 export type UsageCounters = {
   realRuns?: number;
+  /** Prompt 20: AI design calls used this period (edits + remix + generation). */
+  edits?: number;
   inputStudioRows?: number;
   exports?: number;
   githubPrExports?: number;

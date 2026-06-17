@@ -1105,7 +1105,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) {
-          set({ notice: j.error ?? "Couldn't propose edits." });
+          // Out of edits (Prompt 20) → distinct upgrade modal, not a bare error.
+          if (res.status === 402 && j.gate) {
+            get().openUpgrade({ ...j.gate, title: "Out of AI edits" });
+          } else {
+            set({ notice: j.error ?? "Couldn't propose edits." });
+          }
           return;
         }
         // Surgical editing (19b): ambiguous target → ask, don't mutate. The answer re-runs the edit.
@@ -1464,7 +1469,12 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
           return;
         }
         if (!res.ok || !j.pipeline) {
-          set({ notice: j.error ?? "Generation failed." });
+          // Out of generations (Prompt 20, edits pool) → distinct upgrade modal.
+          if (res.status === 402 && j.gate) {
+            get().openUpgrade({ ...j.gate, title: "Out of generations" });
+          } else {
+            set({ notice: j.error ?? "Generation failed." });
+          }
           return;
         }
         const p = pipelineSchema.parse(j.pipeline);

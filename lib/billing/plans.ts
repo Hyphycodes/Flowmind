@@ -10,6 +10,16 @@ const PRICE = {
   studioYearly: process.env.STRIPE_PRICE_STUDIO_YEARLY,
 };
 
+/** Read a per-tier limit from env so the two metered pools (runs, edits) can be tuned without a
+ *  redeploy once real per-run costs are measured. `"unlimited"` is honored; default is the fallback. */
+function limitFromEnv(envKey: string, fallback: import("./types").Limit): import("./types").Limit {
+  const raw = process.env[envKey]?.trim();
+  if (!raw) return fallback;
+  if (raw.toLowerCase() === "unlimited") return "unlimited";
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 export const PLANS: Record<PlanId, PlanConfig> = {
   free: {
     id: "free",
@@ -21,7 +31,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     features: ["templates", "real_ai_runs", "input_studio", "developer_export"],
     limits: {
       savedPipelines: 3,
-      realRunsPerMonth: 25,
+      realRunsPerMonth: limitFromEnv("LIMIT_RUNS_FREE", 25),
+      editsPerMonth: limitFromEnv("LIMIT_EDITS_FREE", 40),
       inputStudioRowsPerMonth: 200,
       exportsPerMonth: 5,
       githubPrExportsPerMonth: 0,
@@ -57,7 +68,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
     limits: {
       savedPipelines: 50,
-      realRunsPerMonth: 1000,
+      realRunsPerMonth: limitFromEnv("LIMIT_RUNS_PRO", 1000),
+      editsPerMonth: limitFromEnv("LIMIT_EDITS_PRO", 1000),
       inputStudioRowsPerMonth: 10000,
       exportsPerMonth: 100,
       githubPrExportsPerMonth: 50,
@@ -96,7 +108,8 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     ],
     limits: {
       savedPipelines: "unlimited",
-      realRunsPerMonth: 5000,
+      realRunsPerMonth: limitFromEnv("LIMIT_RUNS_STUDIO", 5000),
+      editsPerMonth: limitFromEnv("LIMIT_EDITS_STUDIO", 5000),
       inputStudioRowsPerMonth: 100000,
       exportsPerMonth: "unlimited",
       githubPrExportsPerMonth: 500,
@@ -135,6 +148,7 @@ export const PLANS: Record<PlanId, PlanConfig> = {
     limits: {
       savedPipelines: "unlimited",
       realRunsPerMonth: "unlimited",
+      editsPerMonth: "unlimited",
       inputStudioRowsPerMonth: "unlimited",
       exportsPerMonth: "unlimited",
       githubPrExportsPerMonth: "unlimited",

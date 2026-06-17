@@ -80,6 +80,40 @@ export function canRunPipeline(account: BillingAccount, estimate: CreditEstimate
   return { allowed: true, creditsRequired: need, creditsAvailable: have, softWarning: softs[0] };
 }
 
+/**
+ * Gate an AI design call — a chat edit, a remix move, or a from-scratch generation (Prompt 20).
+ * This is the EDITS pool, independent of RUNS: different cost shape, separate limit + upgrade lever.
+ * `kind` only tweaks the message ("edit" vs "generate"); both decrement the same `edits` counter.
+ */
+export function canEditPipeline(account: BillingAccount, kind: "edit" | "generate" = "edit"): FeatureGateResult {
+  if (!account.billingEnabled) return ALLOW;
+
+  const feat = canUseFeature(account, "real_ai_runs");
+  if (!feat.allowed) return feat;
+
+  const used = account.counters.edits ?? 0;
+  const left = remaining(account.plan.limits.editsPerMonth, used);
+  if (left !== "unlimited" && left <= 0) {
+    const noun = kind === "generate" ? "generations" : "AI edits";
+    return {
+      allowed: false,
+      reason: `You've used all ${account.plan.limits.editsPerMonth} ${noun} this month.`,
+      planRequired: account.planId === "free" ? "pro" : "studio",
+      upgradeCta: "Upgrade for more edits",
+    };
+  }
+  const soft = left !== "unlimited" && left <= 3 ? `Only ${left} AI edit${left === 1 ? "" : "s"} left this month.` : undefined;
+  return { allowed: true, softWarning: soft };
+}
+
+/** Remaining count for a pool, for the UI meters. */
+export function remainingRuns(account: BillingAccount): number | "unlimited" {
+  return remaining(account.plan.limits.realRunsPerMonth, account.counters.realRuns ?? 0);
+}
+export function remainingEdits(account: BillingAccount): number | "unlimited" {
+  return remaining(account.plan.limits.editsPerMonth, account.counters.edits ?? 0);
+}
+
 export function canCreateDatasetRows(account: BillingAccount, rowCount: number): FeatureGateResult {
   if (!account.billingEnabled) return ALLOW;
   const feat = canUseFeature(account, "input_studio");

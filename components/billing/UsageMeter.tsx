@@ -13,13 +13,14 @@ type Usage = {
   creditsRemaining: number;
   includedCredits: number;
   realRuns: Counter;
+  edits: Counter;
   exports: Counter;
   githubPrExports: Counter;
   inputStudioRows: Counter;
   periodEnd: string;
 };
 
-const ACCENT = { credits: "#8b5cf6", runs: "#4f8bff", exports: "#2dd4bf" };
+const ACCENT = { credits: "#8b5cf6", runs: "#4f8bff", edits: "#22d3ee", exports: "#2dd4bf" };
 
 function pct(used: number, limit: LimitVal): number {
   if (limit === "unlimited" || limit === 0) return 0;
@@ -81,6 +82,12 @@ export function UsageMeter() {
           value={u.realRuns.limit === "unlimited" ? `${u.realRuns.used}` : `${u.realRuns.used} / ${u.realRuns.limit}`}
           pct={pct(u.realRuns.used, u.realRuns.limit)}
           accent={ACCENT.runs}
+        />
+        <Meter
+          label="Edits"
+          value={u.edits.limit === "unlimited" ? `${u.edits.used}` : `${u.edits.used} / ${u.edits.limit}`}
+          pct={pct(u.edits.used, u.edits.limit)}
+          accent={ACCENT.edits}
         />
         <Meter
           label="Exports"

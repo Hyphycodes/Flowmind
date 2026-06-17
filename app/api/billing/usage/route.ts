@@ -13,6 +13,7 @@ export async function GET() {
     creditsRemaining: Math.round(a.balance.balance),
     includedCredits: a.plan.includedCredits,
     realRuns: { used: a.counters.realRuns ?? 0, limit: lim.realRunsPerMonth },
+    edits: { used: a.counters.edits ?? 0, limit: lim.editsPerMonth },
     exports: { used: a.counters.exports ?? 0, limit: lim.exportsPerMonth },
     githubPrExports: { used: a.counters.githubPrExports ?? 0, limit: lim.githubPrExportsPerMonth },
     inputStudioRows: { used: a.counters.inputStudioRows ?? 0, limit: lim.inputStudioRowsPerMonth },

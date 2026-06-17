@@ -5,14 +5,24 @@ import { editProposalSchema, screenChanges } from "@/lib/pipeline/editDiff";
 import { builderPreferencesSchema, preferencesToPromptBlock } from "@/lib/preferences/schema";
 import { tryLoadPrompt } from "@/lib/prompts";
 import { safeApiError, requireAuthedAI } from "@/lib/api/guards";
+import { getBillingAccount, recordEditSpend } from "@/lib/billing/usage";
+import { canEditPipeline } from "@/lib/billing/featureGates";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 // Requires auth + per-user rate limiting: spends provider tokens (real Claude edit diffs).
+// Metered against the EDITS pool (Prompt 20) — separate from the runs pool.
 export async function POST(req: Request) {
   const guard = await requireAuthedAI();
   if (guard instanceof Response) return guard;
+
+  // Edits pool gate (no-op unless billing is enabled). 402 → the client opens the upgrade modal.
+  const editAccount = await getBillingAccount();
+  const editGate = canEditPipeline(editAccount, "edit");
+  if (!editGate.allowed) {
+    return Response.json({ error: editGate.reason ?? "Out of AI edits", gate: editGate, pool: "edits" }, { status: 402 });
+  }
 
   if (!hasAnthropicKey()) {
     // No fake diffs — edits require a real model.
@@ -78,11 +88,15 @@ export async function POST(req: Request) {
       maxRetries: 1,
     });
     // Surgical editing (19b): if the model couldn't pin the target, ask instead of guessing.
+    // A clarifying question still consumed one AI call — meter it.
     if (object.clarify && object.changes.length === 0) {
+      await recordEditSpend();
       return Response.json({ clarify: object.clarify, clarifyOptions: object.clarifyOptions ?? [] });
     }
     // Server-side screen: drop any change that would break the graph (cycle/orphan/invalid).
     const changes = screenChanges(pipeline, object.changes);
+    // Success → decrement the edits pool exactly once (failed calls below never reach here).
+    await recordEditSpend();
     return Response.json({ changes });
   } catch (err) {
     return Response.json({ error: safeApiError(err, "Could not propose edits.") }, { status: 500 });
