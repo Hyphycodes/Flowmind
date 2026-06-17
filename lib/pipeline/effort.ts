@@ -16,9 +16,9 @@ export const EFFORT_LABELS: Record<EffortLevel, string> = {
   deep: "Deep",
 };
 
-/** Short hint shown on hover — the node-count guidance the Architect follows. */
+/** Short hint shown on hover — the hard contract each level enforces (Prompt 17). */
 export const EFFORT_HINTS: Record<EffortLevel, string> = {
-  tight: "One clean chain · ~3–6 nodes",
-  balanced: "A few nodes + small teams · ~6–12 nodes",
-  deep: "Rich structure: teams, debate & vote · up to ~30 agents",
+  tight: "Single agents only · Haiku/Sonnet · ~3–6 nodes",
+  balanced: "Small teams where needed · Sonnet · ~6–12 nodes",
+  deep: "Teams, debate & vote · Sonnet + Opus chair · up to ~50 agents",
 };

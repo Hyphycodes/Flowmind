@@ -196,9 +196,130 @@ function buildTeam(node: GenNode) {
   return { strategy, agents };
 }
 
+/* ── Effort as a HARD contract (Prompt 17) ────────────────────────────────────
+ * The system prompt asks the model to honor each level, but a model can slip — so
+ * after generation we deterministically clamp the graph to the level. This is the
+ * source of truth: a TIGHT graph CANNOT contain a team, a non-DEEP graph CANNOT
+ * carry Opus, and DEEP places Opus on exactly the one critical judgment node.
+ * Every correction is logged with a reason. Tunable thresholds live here. */
+
+const MODELS = {
+  worker: "claude-sonnet-4-6",
+  light: "claude-haiku-4-5-20251001",
+  critical: "claude-opus-4-8",
+} as const;
+
+/** Below this member count a "team" isn't really coordinating — collapse it at BALANCED. */
+const BALANCED_TEAM_MIN = 3;
+/** A non-trivial request that returns this many brain nodes but no team is worth flagging at DEEP. */
+const DEEP_FLAT_BRAIN_THRESHOLD = 4;
+
+type CNode = Record<string, unknown>;
+type CTeam = { strategy?: string; agents?: Array<Record<string, unknown>> };
+
+const LIGHT_TYPES = new Set(["input", "output", "transformer", "tool"]);
+
+/** Collapse a team node into a single agent node (used by TIGHT always, BALANCED for tiny teams). */
+function flattenTeamToAgent(node: CNode): CNode {
+  const team = (node.team ?? {}) as CTeam;
+  const agents = team.agents ?? [];
+  const lead = agents.find((a) => a.isLead) ?? agents.find((a) => !a.isController) ?? agents[0];
+  const memberPrompts = agents
+    .filter((a) => !a.isController && typeof a.prompt === "string" && (a.prompt as string).trim())
+    .map((a) => a.prompt as string);
+  const prompt =
+    (typeof node.prompt === "string" && node.prompt.trim() && node.prompt) ||
+    (lead?.prompt as string) ||
+    memberPrompts.join("\n\n") ||
+    "";
+  const role = (typeof node.role === "string" && node.role) || (lead?.role as string) || "";
+  const next: CNode = { ...node, type: "agent", role, prompt };
+  delete next.team;
+  delete next.evalDimensions;
+  return next;
+}
+
+/** Pick the single most critical judgment node for DEEP → Opus. Prefers a debate/vote team's
+ *  chair, else the last team (usually synthesis), else an evaluator, else the node before output. */
+function pickCriticalNodeId(nodes: CNode[]): string | null {
+  const teams = nodes.filter((n) => n.team);
+  const judge = teams.find((n) => ["debate", "vote", "council"].includes((n.team as CTeam).strategy ?? ""));
+  if (judge) return judge.id as string;
+  if (teams.length) return teams[teams.length - 1].id as string;
+  const evaluator = [...nodes].reverse().find((n) => n.type === "evaluator");
+  if (evaluator) return evaluator.id as string;
+  const outputIdx = nodes.findIndex((n) => n.type === "output");
+  if (outputIdx > 0) return nodes[outputIdx - 1].id as string;
+  return null;
+}
+
+/** Structural clamp — enforces the team rules per level. Runs BEFORE team coordination so
+ *  flattened teams never get controllers. */
+function structuralClamp(nodes: CNode[], effort: EffortLevel): { nodes: CNode[]; changes: string[] } {
+  const changes: string[] = [];
+  const out = nodes.map((n) => {
+    if (!n.team) return n;
+    const agents = ((n.team as CTeam).agents ?? []).filter((a) => !a.isController);
+    if (effort === "tight") {
+      changes.push(`TIGHT forbids teams → flattened "${String(n.title)}" (${agents.length} agents) into one agent`);
+      return flattenTeamToAgent(n);
+    }
+    if (effort === "balanced" && agents.length < BALANCED_TEAM_MIN) {
+      changes.push(
+        `BALANCED collapsed under-${BALANCED_TEAM_MIN} team "${String(n.title)}" (${agents.length} agents) into one agent`,
+      );
+      return flattenTeamToAgent(n);
+    }
+    return n;
+  });
+  return { nodes: out, changes };
+}
+
+/** Model clamp — enforces the per-level model ceiling/floor. Runs AFTER coordination so it can
+ *  set controller models too. TIGHT: Haiku on light nodes, Sonnet elsewhere, never Opus.
+ *  BALANCED: Sonnet everywhere, never Opus. DEEP: Opus on exactly the one critical node/chair. */
+function modelClamp(nodes: CNode[], effort: EffortLevel): string[] {
+  const changes: string[] = [];
+  const criticalId = effort === "deep" ? pickCriticalNodeId(nodes) : null;
+
+  for (const n of nodes) {
+    const light = LIGHT_TYPES.has(n.type as string) && !n.team;
+    let model: string;
+    if (effort === "deep" && n.id === criticalId) model = MODELS.critical;
+    else if (effort === "tight" && light) model = MODELS.light;
+    else model = MODELS.worker;
+
+    const prev = n.model as string | undefined;
+    if (prev === MODELS.critical && model !== MODELS.critical) {
+      changes.push(`${effort.toUpperCase()} forbids Opus → "${String(n.title)}" set to ${model}`);
+    }
+    n.model = model;
+
+    if (n.team) {
+      const team = n.team as CTeam;
+      const isCriticalTeam = effort === "deep" && n.id === criticalId;
+      for (const a of team.agents ?? []) {
+        a.model = isCriticalTeam && (a.isController || a.isLead) ? MODELS.critical : MODELS.worker;
+      }
+      if (isCriticalTeam) changes.push(`DEEP promoted chair of "${String(n.title)}" to Opus (critical judgment)`);
+    }
+  }
+
+  if (effort === "deep") {
+    const teamCount = nodes.filter((n) => n.team).length;
+    const brainCount = nodes.filter((n) => !LIGHT_TYPES.has(n.type as string) && !n.team).length;
+    if (teamCount === 0 && brainCount >= DEEP_FLAT_BRAIN_THRESHOLD) {
+      changes.push(`DEEP: model returned a flat graph (${brainCount} agents, no team) — kept as-is, no clean decomposition found`);
+    }
+    if (criticalId == null) changes.push("DEEP: no critical node identified — no Opus assigned");
+  }
+  return changes;
+}
+
 /** Map the Architect's JSON into a loose candidate Pipeline; `repairPipeline`
- *  then validates, derives tables, and lays it out. Exported for testing. */
-export function architectToCandidate(obj: GenObject) {
+ *  then validates, derives tables, and lays it out. Exported for testing.
+ *  `effort` is enforced as a hard contract here (structural + model clamp). */
+export function architectToCandidate(obj: GenObject, effort: EffortLevel = "balanced") {
   const rawNodes = [...(obj.nodes ?? [])];
 
   // Normalize kinds: keep exactly one input (first occurrence) and one output (last).
@@ -249,11 +370,23 @@ export function architectToCandidate(obj: GenObject) {
     return out;
   });
 
-  // Prompt 03 — Team Coordinator: give each team its controller(s), internal
+  // Prompt 17 — enforce the effort contract structurally BEFORE coordination
+  // (so flattened teams never get controllers).
+  const { nodes: clampedNodes, changes: structChanges } = structuralClamp(nodes as CNode[], effort);
+
+  // Prompt 03 — Team Coordinator: give each surviving team its controller(s), internal
   // wiring, lead, and derived identity (deterministic, so large crews stay instant).
-  const coordinatedNodes = nodes.map((n) =>
+  const coordinatedNodes = clampedNodes.map((n) =>
     n.team ? (coordinateTeamNode(n as unknown as TeamNodeLike) as unknown as typeof n) : n,
-  );
+  ) as CNode[];
+
+  // Prompt 17 — enforce the per-level model policy AFTER coordination (covers controllers too).
+  const modelChanges = modelClamp(coordinatedNodes, effort);
+  const effortChanges = [...structChanges, ...modelChanges];
+  if (effortChanges.length) {
+    // Explainable clamp: log exactly what was corrected and why (server-side only).
+    console.log(`[architect] effort=${effort} clamp applied:\n  - ${effortChanges.join("\n  - ")}`);
+  }
 
   const mockInputs = (inputNode?.fields ?? []).map((f) => ({
     key: f.name,
@@ -306,12 +439,36 @@ export function architectToCandidate(obj: GenObject) {
 /* ── Prompt ────────────────────────────────────────────────────────────────── */
 
 const EFFORT_GUIDE: Record<EffortLevel, string> = {
-  tight:
-    "EFFORT = tight. Design one clean chain. No teams, or at most one. Aim for ~3–6 nodes total. Favor a single strong agent over many small ones.",
-  balanced:
-    "EFFORT = balanced (default). Use a few focused nodes plus one or two small teams where coordination genuinely helps. Aim for ~6–12 nodes total.",
+  tight: [
+    "EFFORT = TIGHT — a strict contract you MUST obey:",
+    "- STRUCTURE: single-agent nodes ONLY. You MUST NOT create a `team` node under any circumstance. No crews, no nested members.",
+    "- SIZE: one clean chain, ~3–6 nodes total. Favor one strong agent over many small ones.",
+    "- ORCHESTRATION: strictly sequential. Minimal handoffs.",
+    "- AGENT PROMPTS: short and directive — one or two sentences naming the input it reads and the output it produces. No persona, no chain-of-thought.",
+    "- FEEL: small, fast, readable.",
+  ].join("\n"),
+  balanced: [
+    "EFFORT = BALANCED (default) — a contract:",
+    "- STRUCTURE: mostly single agents. Create a `team` node ONLY where the sub-job genuinely needs 3+ agents coordinating; otherwise use a single agent. Never wrap 1–2 agents in a team.",
+    "- SIZE: ~6–12 nodes total.",
+    "- ORCHESTRATION: sequential or parallel as the task warrants.",
+    "- AGENT PROMPTS: richer — context + constraints + the expected output shape — but no chain-of-thought.",
+  ].join("\n"),
+  deep: [
+    "EFFORT = DEEP — a contract for demo-grade output:",
+    "- STRUCTURE: team nodes are EXPECTED. Decide which sub-problems deserve a crew vs. a single agent, and decompose the hard ones into teams (nested crews where the problem genuinely fans out). Up to ~50 agents total across all teams; a team may hold 6–15 members when the work earns it. Prefer several focused teams over one giant one.",
+    "- ORCHESTRATION: actively use `parallel`, `vote`, and `debate` strategies where they genuinely help (e.g. independent scorers → vote; opposing analyses → debate with a judge); routers to dispatch to specialists.",
+    "- AGENT PROMPTS: full — a clear persona/role, explicit constraints, the exact output format, and brief chain-of-thought guidance ('reason step by step before answering').",
+    "- FEEL: a coordinated system whose internals are worth inspecting. Every node still earns its place — no filler.",
+  ].join("\n"),
+};
+
+/** Per-level model policy, stated to the model (code clamps it regardless). */
+const EFFORT_MODEL_GUIDE: Record<EffortLevel, string> = {
+  tight: "Models: use fast models only — Haiku for light input/format/tool steps, Sonnet for the main reasoning step. Never Opus.",
+  balanced: "Models: Sonnet on every node. Never Opus.",
   deep:
-    "EFFORT = deep. Go big when the work earns it: a rich org of teams and agents, up to ~50 agents total across all teams. Use large parallel / vote / debate teams (a team can hold 8–15 members when the work genuinely fans out), routers that dispatch to specialists, and nested teams. Prefer several focused teams over one giant one. Every node must still justify itself — no filler.",
+    "Models: Sonnet for worker agents; reserve Opus for the SINGLE most critical judgment node (the debate/vote chair, the final synthesizer, or the decisive evaluator) — at most one.",
 };
 
 /** Catalog of data-fetch / lookup tools the Architect can wire as `tool` nodes.
@@ -348,6 +505,8 @@ function systemPrompt(effort: EffortLevel, guidance?: string): string {
     "5. One input, one output. The output's `display` is the small set of fields the user actually sees — keep it to what matters.",
     "",
     EFFORT_GUIDE[effort],
+    EFFORT_MODEL_GUIDE[effort],
+    "This effort level is a hard contract — a post-processing step enforces it in code, so a graph that violates it (e.g. a team at TIGHT, or Opus below DEEP) will be corrected automatically. Design to the contract from the start.",
     "Never add a node that doesn't change the result. Lean toward the smallest design that does the job well.",
     "",
     "Naming: node titles short, human, role-like ('Comp Finder', 'Repair Estimator', 'Final Judge'). Each agent's `prompt` is the instruction that node runs — write it in second person, specific about its one job, naming the inputs it uses and the output it produces. Keep everything generic to the user's domain; invent nothing about the user.",
@@ -381,6 +540,6 @@ export async function generateArchitectPipeline(
     maxRetries: 1,
   });
 
-  const candidate = architectToCandidate(object);
+  const candidate = architectToCandidate(object, effort);
   return repairPipeline(candidate, { description, name: object.name });
 }
