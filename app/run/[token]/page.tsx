@@ -16,7 +16,7 @@ export default async function RunAppPage({ params }: { params: Promise<{ token: 
 
   if (!share || !level || !pipeline) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#07070c] px-6 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-canvas px-6 text-center">
         <div className="max-w-sm">
           <div className="font-display text-2xl italic text-ink">flowmind</div>
           <p className="mt-3 text-[13px] leading-relaxed text-ink-dim">

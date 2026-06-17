@@ -134,7 +134,7 @@ export function Builder() {
   const empty = !loading && (!pipeline || pipeline.nodes.length === 0);
 
   return (
-    <div className="flex h-full">
+    <div className="surface-locked flex">
       <Sidebar onNewPipeline={startNew} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar />

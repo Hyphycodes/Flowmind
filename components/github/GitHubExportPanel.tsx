@@ -351,7 +351,7 @@ function GitHubIssuesButton() {
   }
 
   return (
-    <div className="absolute inset-0 z-10 flex flex-col rounded-2xl bg-bg/95 p-3 backdrop-blur-sm">
+    <div className="absolute inset-0 z-10 flex flex-col rounded-2xl bg-canvas/95 p-3 backdrop-blur-sm">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[12px] font-medium text-ink">Implementation issues</span>
         <button onClick={() => setOpen(false)} className="text-[11px] text-ink-faint hover:text-ink">

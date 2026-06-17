@@ -81,7 +81,7 @@ export function RunAppClient({ manifest, token }: { manifest: RunAppManifest; to
   };
 
   return (
-    <div className="min-h-screen bg-[#07070c] px-5 py-10 text-ink">
+    <div className="min-h-screen bg-canvas px-5 py-10 text-ink">
       <div className="mx-auto w-full max-w-xl">
         <header className="mb-6 flex items-center justify-between">
           <div>

@@ -46,11 +46,12 @@ export function DemoCanvas() {
   }, [demoLevel]);
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-bg">
-      {/* Demo top strip (no Sidebar / network TopBar — the canvas is the hero) */}
-      <header className="flex items-center gap-3 border-b border-line px-4 py-2.5">
-        <Link href="/" className="font-display text-[15px] italic text-ink">
-          Flowmind
+    <div className="surface-locked flex flex-col bg-canvas">
+      {/* Demo top strip (no Sidebar / network TopBar — the canvas is the hero). Slim, but
+          shares the app's h-14 header height, brand mark, and type scale. */}
+      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-line bg-[#08080e]/70 px-5 backdrop-blur-xl">
+        <Link href="/" className="font-display text-[22px] italic leading-none tracking-tight text-ink">
+          flowmind
         </Link>
         <span className="rounded-full border border-line bg-white/[0.03] px-2.5 py-1 text-[11px] text-ink-faint">
           {DEMO_COPY.badge}

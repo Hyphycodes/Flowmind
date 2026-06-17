@@ -45,7 +45,14 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+  /* Lock scroll ONLY on the full-bleed canvas surfaces (editor + demo). Every other
+     route — landing, auth, pricing, settings, runs, library, pipelines, hosted run —
+     scrolls normally. Applied via the `.surface-locked` wrapper on those two surfaces. */
+  .surface-locked {
+    height: 100dvh;
     overflow: hidden;
+    overscroll-behavior: none;
   }
   ::selection {
     background: color-mix(in srgb, var(--color-violet) 40%, transparent);
