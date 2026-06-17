@@ -77,7 +77,11 @@ export async function POST(req: Request) {
       temperature: 0.3,
       maxRetries: 1,
     });
-    // Server-side screen: drop any change that would break the graph if applied to the base.
+    // Surgical editing (19b): if the model couldn't pin the target, ask instead of guessing.
+    if (object.clarify && object.changes.length === 0) {
+      return Response.json({ clarify: object.clarify, clarifyOptions: object.clarifyOptions ?? [] });
+    }
+    // Server-side screen: drop any change that would break the graph (cycle/orphan/invalid).
     const changes = screenChanges(pipeline, object.changes);
     return Response.json({ changes });
   } catch (err) {

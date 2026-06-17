@@ -154,7 +154,7 @@ interface PipelineState {
 
   /** Builder preferences (learned + explicit) + the ask-or-build clarification prompt. */
   preferences: BuilderPreferences | null;
-  clarify: { question: string; options: string[]; description: string } | null;
+  clarify: { question: string; options: string[]; description: string; kind?: "generate" | "edit" } | null;
 
   /** Living Library — reusable assets (nodes/prompts/tools) saved from your work. */
   libraryAssets: LibraryAsset[];
@@ -1108,6 +1108,18 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
           set({ notice: j.error ?? "Couldn't propose edits." });
           return;
         }
+        // Surgical editing (19b): ambiguous target → ask, don't mutate. The answer re-runs the edit.
+        if (typeof j.clarify === "string" && j.clarify) {
+          set({
+            clarify: {
+              question: j.clarify,
+              options: Array.isArray(j.clarifyOptions) ? j.clarifyOptions : [],
+              description: request,
+              kind: "edit",
+            },
+          });
+          return;
+        }
         const changes: EditChange[] = Array.isArray(j.changes) ? j.changes : [];
         if (changes.length === 0) {
           set({ notice: "No changes needed — the pipeline already does that." });
@@ -1218,14 +1230,17 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       if (!c) return;
       const combined = answer.trim() ? `${c.description} — ${answer.trim()}` : c.description;
       set({ clarify: null });
-      void get().generate(combined, undefined, { clarified: true });
+      // Route the answer back to the flow that asked: an edit clarification re-runs the edit.
+      if (c.kind === "edit") void get().proposeEdit(combined);
+      else void get().generate(combined, undefined, { clarified: true });
     },
 
     dismissClarification: () => {
       const c = get().clarify;
       if (!c) return;
       set({ clarify: null });
-      void get().generate(c.description, undefined, { clarified: true });
+      // Dismiss = "just do your best": generation builds something; an edit dismissal just stops.
+      if (c.kind !== "edit") void get().generate(c.description, undefined, { clarified: true });
     },
 
     /* ── Living Library ───────────────────────────────────────────────── */

@@ -183,7 +183,7 @@ export function CommandBar() {
               onClick={dismissClarification}
               className="rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:text-ink"
             >
-              Just build something
+              {clarify.kind === "edit" ? "Never mind" : "Just build something"}
             </button>
           </div>
         </div>

@@ -54,7 +54,12 @@ export const editChangeSchema = z.object({
 });
 export type EditChange = z.infer<typeof editChangeSchema>;
 
-export const editProposalSchema = z.object({ changes: z.array(editChangeSchema).default([]) });
+export const editProposalSchema = z.object({
+  changes: z.array(editChangeSchema).default([]),
+  /** Surgical editing (Prompt 19b): when the target node is ambiguous, ask instead of guessing. */
+  clarify: z.string().optional(),
+  clarifyOptions: z.array(z.string()).optional(),
+});
 export type EditProposal = z.infer<typeof editProposalSchema>;
 
 /* ── Ghost preview helpers (the canvas shows the shape before committing) ──────────── */
@@ -180,8 +185,12 @@ export function applyChangesToPipeline(
       skipped.push({ id: change.id, reason: "would break the graph" });
       continue;
     }
-    // every node except input must keep at least a path in/out is a soft check; the schema parse
-    // plus edge sanity above is the hard gate.
+    // Refuse a change that introduces a cycle, an orphan, or a disconnected node (Prompt 19b).
+    const breakage = newBreakage(p, parsed.data);
+    if (breakage) {
+      skipped.push({ id: change.id, reason: breakage });
+      continue;
+    }
     p = parsed.data;
     applied.push(change.id);
   }
@@ -204,12 +213,94 @@ export function applyChangesToPipeline(
   return { pipeline: p, applied, skipped };
 }
 
-/** Server-side screen: keep only changes that, applied alone to the base, yield a valid graph. */
+/* ── Graph integrity (Prompt 19b) ─────────────────────────────────────────────
+ * The schema parse guarantees valid shapes + existing edge endpoints, but not graph health.
+ * These checks catch the two failure modes a bad edit introduces: a CYCLE (the graph stops being
+ * a DAG that can run) and an ORPHAN (a node with no wiring, or one unreachable from input / that
+ * can't reach output). An edit is refused only when it INTRODUCES breakage the base didn't have —
+ * so we never block on pre-existing quirks. */
+
+export type GraphIntegrity = { cyclic: boolean; orphans: string[]; unreachable: string[] };
+
+export function graphIntegrity(p: Pipeline): GraphIntegrity {
+  const ids = new Set(p.nodes.map((n) => n.id));
+  const out = new Map<string, string[]>();
+  const inc = new Map<string, string[]>();
+  for (const id of ids) {
+    out.set(id, []);
+    inc.set(id, []);
+  }
+  for (const e of p.edges) {
+    if (ids.has(e.source) && ids.has(e.target)) {
+      out.get(e.source)!.push(e.target);
+      inc.get(e.target)!.push(e.source);
+    }
+  }
+
+  // Cycle detection (DFS colors).
+  const color = new Map<string, 0 | 1 | 2>();
+  let cyclic = false;
+  const visit = (u: string) => {
+    color.set(u, 1);
+    for (const v of out.get(u) ?? []) {
+      const c = color.get(v) ?? 0;
+      if (c === 1) cyclic = true;
+      else if (c === 0) visit(v);
+    }
+    color.set(u, 2);
+  };
+  for (const id of ids) if ((color.get(id) ?? 0) === 0) visit(id);
+
+  // Orphans: a non-input with no incoming AND no outgoing edge (floating), excluding input/output ends.
+  const orphans = p.nodes
+    .filter((n) => (out.get(n.id)!.length === 0 && inc.get(n.id)!.length === 0))
+    .map((n) => n.id);
+
+  // Reachability: from the input forward, and to the output backward.
+  const inputId = p.nodes.find((n) => n.type === "input")?.id;
+  const outputId = p.nodes.find((n) => n.type === "output")?.id;
+  const reachFrom = (start: string | undefined, adj: Map<string, string[]>) => {
+    const seen = new Set<string>();
+    if (!start) return seen;
+    const stack = [start];
+    while (stack.length) {
+      const u = stack.pop()!;
+      if (seen.has(u)) continue;
+      seen.add(u);
+      for (const v of adj.get(u) ?? []) stack.push(v);
+    }
+    return seen;
+  };
+  const fromInput = reachFrom(inputId, out);
+  const toOutput = reachFrom(outputId, inc);
+  const unreachable = p.nodes
+    .filter((n) => n.type !== "input" && n.type !== "output" && (!fromInput.has(n.id) || !toOutput.has(n.id)))
+    .map((n) => n.id);
+
+  return { cyclic, orphans, unreachable };
+}
+
+/** Why a candidate breaks the graph relative to the base — null if it introduces no new breakage. */
+function newBreakage(base: Pipeline, candidate: Pipeline): string | null {
+  const a = graphIntegrity(base);
+  const b = graphIntegrity(candidate);
+  if (b.cyclic && !a.cyclic) return "would create a cycle in the graph";
+  const newOrphans = b.orphans.filter((id) => !a.orphans.includes(id));
+  if (newOrphans.length) return `would orphan a node (${newOrphans.join(", ")})`;
+  const newUnreachable = b.unreachable.filter((id) => !a.unreachable.includes(id));
+  if (newUnreachable.length) return `would leave a node disconnected from the input/output path (${newUnreachable.join(", ")})`;
+  return null;
+}
+
+/** Server-side screen: keep only changes that, applied alone to the base, yield a valid graph that
+ *  introduces no new cycle/orphan/unreachable node (minimal-blast-radius safety). */
 export function screenChanges(base: Pipeline, changes: EditChange[]): EditChange[] {
   return changes.filter((ch) => {
     try {
       const candidate = applyOneChange(base, ch, new Set<string>());
-      return pipelineSchema.safeParse(candidate).success;
+      const parsed = pipelineSchema.safeParse(candidate);
+      if (!parsed.success) return false;
+      return newBreakage(base, parsed.data) === null;
     } catch {
       return false;
     }
