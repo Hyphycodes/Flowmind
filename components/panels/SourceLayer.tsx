@@ -145,7 +145,7 @@ export function SourceLayer({ node }: { node: PipelineNode }) {
                 >
                   View dataset
                 </Action>
-                <Action icon={Layers} onClick={() => setPanelTab("data")}>
+                <Action icon={Layers} onClick={() => setPanelTab("input")}>
                   Use another dataset
                 </Action>
                 <Action icon={FlaskConical} onClick={() => setShowContract((v) => !v)}>

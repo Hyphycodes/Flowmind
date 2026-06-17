@@ -76,13 +76,13 @@ export function CommandBar() {
         { label: "Make this team smarter", run: () => startRemix("make_smarter") },
         { label: "Add an evaluator", run: () => startRemix("add_evaluator") },
         { label: "Re-run this team", run: () => void rerunTeam(selectedNode.id) },
-        { label: "Compare Takes", run: () => setPanelTab("run") },
+        { label: "Compare Takes", run: () => setPanelTab("output") },
       ]
     : [];
   const sourceChips: { label: string; run: () => void }[] = selectedNode
     ? [
         { label: "Generate stronger inputs", run: () => openInputStudio(selectedNode.id) },
-        { label: "Open Dataset Library", run: () => setPanelTab("data") },
+        { label: "Open Dataset Library", run: () => setPanelTab("input") },
         selectedNode.source?.mode === "live_api"
           ? { label: "Switch to Input Studio", run: () => setSourceMode(selectedNode.id, "input_studio") }
           : { label: "Switch to Live API", run: () => setSourceMode(selectedNode.id, "live_api") },

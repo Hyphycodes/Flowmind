@@ -76,7 +76,7 @@ import type { FeatureGateResult } from "@/lib/billing/types";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error" | "local";
 export type RunStatus = "idle" | "running" | "success" | "error";
-export type PanelTab = "build" | "run" | "data";
+export type PanelTab = "preview" | "input" | "output";
 type RunOptions = { onlyNodeId?: string; onlyAgentId?: string; fromNodeId?: string };
 
 export type GenerateDatasetInput = {
@@ -401,7 +401,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     selectedTeamTraceId: null,
     runningTeamId: null,
     runningAgentId: null,
-    panelTab: "build",
+    panelTab: "output",
     panelOpen: true,
     connectToUI: true,
     activeTableId: null,
@@ -500,7 +500,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         selectedTeamTraceId: null,
         steps: p.nodes.map((n) => ({ nodeId: n.id, title: n.title, status: "idle" as const, durationMs: 0 })),
         pipeline: applyStatuses(p, () => "idle"),
-        panelTab: "run",
+        panelTab: "output",
         panelOpen: true,
       });
       // Compress the real timings into a snappy replay; node activation order is preserved.
@@ -599,7 +599,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         exportOpen: false,
         exportHealth: null,
         lastExportManifest: null,
-        panelTab: "build",
+        panelTab: "output",
         saveStatus: hasSupabase() ? "saved" : "local",
         notice: null,
       });
@@ -783,7 +783,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     setActiveTable: (activeTableId) => set({ activeTableId }),
     setNotice: (notice) => set({ notice }),
     setEffort: (effort) => set({ effort }),
-    selectPacket: (selectedPacketId) => set({ selectedPacketId, panelTab: "run", panelOpen: true }),
+    selectPacket: (selectedPacketId) => set({ selectedPacketId, panelTab: "output", panelOpen: true }),
 
     /* ── Input Studio / Source Layer ──────────────────────────────────── */
 
@@ -818,7 +818,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     },
 
     setActiveDataset: (activeDatasetId) =>
-      set({ activeDatasetId, panelTab: "data", panelOpen: true }),
+      set({ activeDatasetId, panelTab: "input", panelOpen: true }),
 
     openInputStudio: (nodeId = null) => set({ inputStudio: { open: true, nodeId } }),
     closeInputStudio: () => set({ inputStudio: { open: false, nodeId: null } }),
@@ -995,7 +995,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         return { takes, activeTakeId: s.activeTakeId ?? takes[0]?.id ?? null };
       }),
 
-    selectTake: (activeTakeId) => set({ activeTakeId, panelTab: "run", panelOpen: true }),
+    selectTake: (activeTakeId) => set({ activeTakeId, panelTab: "output", panelOpen: true }),
 
     toggleCompareTake: (id) =>
       set((s) => {
@@ -1550,7 +1550,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
         selectedPacketId: null,
         selectedTeamTraceId: null,
         tables: seedTables,
-        panelTab: "run",
+        panelTab: "output",
         panelOpen: true,
         steps,
         pipeline: applyStatuses(p, (n) => (subset && !subset.has(n.id) ? n.status : "idle")),

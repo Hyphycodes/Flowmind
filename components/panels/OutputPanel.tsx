@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Braces, Gauge, Loader2, Play, Route } from "lucide-react";
+import { AlertTriangle, Braces, Gauge, Loader2, Play, Route, Type } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { packetTimeline } from "@/lib/packets/packetUtils";
 import { ACCENT_HEX, isAccent } from "@/lib/ui/colors";
@@ -15,9 +15,9 @@ import { OptimizePanel } from "./OptimizePanel";
 import { ProductPanel } from "./ProductPanel";
 
 const TABS = [
-  { id: "build", label: "Build" },
-  { id: "run", label: "Run" },
-  { id: "data", label: "Data" },
+  { id: "preview", label: "Preview" },
+  { id: "input", label: "Input" },
+  { id: "output", label: "Output" },
 ] as const;
 
 export function OutputPanel() {
@@ -45,131 +45,216 @@ export function OutputPanel() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {panelTab === "build" && <ProductPanel />}
-        {panelTab === "run" && <RunTab />}
-        {panelTab === "data" && <DatasetPanel />}
+        {panelTab === "preview" && <PreviewTab />}
+        {panelTab === "input" && <InputTab />}
+        {panelTab === "output" && <OutputTab />}
       </div>
     </aside>
   );
 }
 
-/* ── Run — the hero tab: inputs → results → trace ─────────────────────────── */
+/* ── Shared section header (Final Output / Key Highlights / Output Tables …) ── */
 
-function RunTab() {
-  const pipeline = usePipelineStore((s) => s.pipeline);
+function SectionLabel({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div className="mb-2.5 flex items-center justify-between">
+      <h2 className="text-[13px] font-medium text-ink">{title}</h2>
+      {children}
+    </div>
+  );
+}
+
+/* ── Output — the hero tab: final output → highlights → tables → trace ──────── */
+
+function OutputTab() {
   const tables = usePipelineStore((s) => s.tables);
   const finalOutput = usePipelineStore((s) => s.finalOutput);
   const runStatus = usePipelineStore((s) => s.runStatus);
-  const setMockInput = usePipelineStore((s) => s.setMockInput);
-  const runPipeline = usePipelineStore((s) => s.runPipeline);
   const connectToUI = usePipelineStore((s) => s.connectToUI);
+  const pipeline = usePipelineStore((s) => s.pipeline);
+  const setPanelTab = usePipelineStore((s) => s.setPanelTab);
+  const [asText, setAsText] = useState(false);
 
-  const fields = pipeline?.mockInputs ?? [];
   const bindings = pipeline?.uiBindings ?? [];
   const running = runStatus === "running";
   const ran = Boolean(finalOutput) || tables.some((t) => t.rows.length > 0);
 
-  const inputForm = (
-    <div className="space-y-3">
-      {fields.length > 0 ? (
-        fields.map((f) => (
-          <label key={f.key} className="block">
-            <span className="mb-1 block text-[11px] text-ink-dim">{f.label}</span>
-            <input
-              value={f.value}
-              placeholder={f.placeholder}
-              onChange={(e) => setMockInput(f.key, e.target.value)}
-              className="w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-[13px] text-ink outline-none focus:border-line-strong"
-            />
-          </label>
-        ))
-      ) : (
-        <p className="text-[11px] text-ink-faint">This pipeline has no configurable inputs.</p>
-      )}
-      <button
-        onClick={() => void runPipeline()}
-        disabled={running || !pipeline}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet py-2.5 text-[13px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
-      >
-        {running ? <Loader2 size={15} className="animate-spin" /> : <Play size={14} className="fill-current" />}
-        Run pipeline
-      </button>
-    </div>
-  );
+  if (!ran && !running) {
+    return (
+      <div className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-line px-6 text-center">
+        <p className="text-[13px] text-ink">Run the pipeline to see results here.</p>
+        <button
+          onClick={() => setPanelTab("input")}
+          className="flex items-center gap-2 rounded-lg bg-violet px-3.5 py-2 text-[12.5px] font-medium text-white transition hover:bg-violet/90"
+        >
+          <Play size={13} className="fill-current" /> Set up a run
+        </button>
+      </div>
+    );
+  }
+
+  const highlights = finalOutput?.highlights ?? [];
 
   return (
-    <div className="space-y-5">
-      {/* Inputs — compact; collapsed under a disclosure once a run has results */}
-      {ran ? (
-        <details className="rounded-xl border border-line bg-white/[0.02]">
-          <summary className="cursor-pointer list-none px-3 py-2 text-[11.5px] font-medium text-ink-dim transition hover:text-ink">
-            Change inputs ↓
-          </summary>
-          <div className="px-3 pb-3">{inputForm}</div>
-        </details>
-      ) : (
-        inputForm
-      )}
-
-      {/* Results — the hero */}
-      {ran || running ? (
-        <div className="space-y-4">
-          {finalOutput && (
+    <div className="space-y-6">
+      {/* Final Output */}
+      {finalOutput && (
+        <section>
+          <SectionLabel title="Final Output">
+            <button
+              onClick={() => setAsText((v) => !v)}
+              className={cn(
+                "flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] transition",
+                asText ? "text-violet" : "text-ink-faint hover:text-ink",
+              )}
+              title="Toggle plain-text view"
+            >
+              <Type size={12} /> Text
+            </button>
+          </SectionLabel>
+          {asText ? (
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-2xl border border-line bg-black/30 p-4 font-mono text-[11.5px] leading-relaxed text-ink-dim">
+              {[finalOutput.title, "", finalOutput.summary, ...(highlights.length ? ["", ...highlights.map((h) => `• ${h.label}: ${h.value}`)] : [])].join("\n")}
+            </pre>
+          ) : (
             <section className="rounded-2xl border border-line bg-gradient-to-b from-white/[0.05] to-transparent p-4">
               <h2 className="text-[17px] font-semibold leading-tight text-ink">{finalOutput.title}</h2>
               {finalOutput.summary && (
                 <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-dim">{finalOutput.summary}</p>
               )}
-              {finalOutput.highlights?.length ? (
-                <div className="mt-3 space-y-0.5">
-                  {finalOutput.highlights.map((h, i) => {
-                    const color = h.accent && isAccent(h.accent) ? ACCENT_HEX[h.accent] : "#8b8b9e";
-                    return (
-                      <div key={i} className="flex items-center justify-between gap-3 border-b border-line/40 py-1.5 last:border-0">
-                        <span className="flex items-center gap-2 text-[12.5px] text-ink-dim">
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
-                          {h.label}
-                        </span>
-                        <span className="text-right text-[12.5px] font-medium text-ink">{h.value}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
             </section>
           )}
+        </section>
+      )}
 
-          <TableList tables={tables} bindings={bindings} />
+      {/* Key Highlights */}
+      {!asText && highlights.length > 0 && (
+        <section>
+          <SectionLabel title="Key Highlights" />
+          <div className="space-y-0.5">
+            {highlights.map((h, i) => {
+              const color = h.accent && isAccent(h.accent) ? ACCENT_HEX[h.accent] : "#8b8b9e";
+              return (
+                <div key={i} className="flex items-start justify-between gap-3 border-b border-line/40 py-1.5 last:border-0">
+                  <span className="flex items-center gap-2 text-[12.5px] text-ink-dim">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: color }} />
+                    {h.label}
+                  </span>
+                  <span className="text-right text-[12.5px] font-medium text-ink">{h.value}</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-          {connectToUI && bindings.length > 0 && tables.some((t) => t.rows.length > 0) && (
-            <UIPreview tables={tables} bindings={bindings} />
+      {/* Output Tables */}
+      <section>
+        <SectionLabel title="Output Tables">
+          <span className="text-[11px] text-ink-faint">{tables.length} {tables.length === 1 ? "table" : "tables"}</span>
+        </SectionLabel>
+        <TableList tables={tables} bindings={bindings} />
+      </section>
+
+      {connectToUI && bindings.length > 0 && tables.some((t) => t.rows.length > 0) && (
+        <section>
+          <SectionLabel title="UI Preview" />
+          <UIPreview tables={tables} bindings={bindings} />
+        </section>
+      )}
+
+      {/* Trace — look-deeper tools, closed by default */}
+      <details className="rounded-xl border border-line bg-white/[0.02]">
+        <summary className="cursor-pointer list-none px-3 py-2 text-[11.5px] font-medium text-ink-dim transition hover:text-ink">
+          Run trace
+        </summary>
+        <div className="space-y-6 border-t border-line px-3 pb-3 pt-3">
+          <section>
+            <h3 className="mb-2 text-[12px] font-medium text-ink">Timeline</h3>
+            <RunTimeline />
+          </section>
+          <section>
+            <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-ink">
+              <Gauge size={13} className="text-green" /> Optimize
+            </h3>
+            <OptimizePanel />
+          </section>
+          <PacketTab />
+          <TakesPanel />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/* ── Input — configure and launch a run ────────────────────────────────────── */
+
+function InputTab() {
+  const pipeline = usePipelineStore((s) => s.pipeline);
+  const setMockInput = usePipelineStore((s) => s.setMockInput);
+  const runPipeline = usePipelineStore((s) => s.runPipeline);
+  const runStatus = usePipelineStore((s) => s.runStatus);
+
+  const fields = pipeline?.mockInputs ?? [];
+  const running = runStatus === "running";
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <SectionLabel title="Inputs" />
+        <div className="space-y-3">
+          {fields.length > 0 ? (
+            fields.map((f) => (
+              <label key={f.key} className="block">
+                <span className="mb-1 block text-[11px] text-ink-dim">{f.label}</span>
+                <input
+                  value={f.value}
+                  placeholder={f.placeholder}
+                  onChange={(e) => setMockInput(f.key, e.target.value)}
+                  className="w-full rounded-lg border border-line bg-black/30 px-3 py-2 text-[13px] text-ink outline-none focus:border-line-strong"
+                />
+              </label>
+            ))
+          ) : (
+            <p className="rounded-xl border border-dashed border-line px-3 py-6 text-center text-[11.5px] text-ink-faint">
+              This pipeline has no configurable inputs.
+            </p>
           )}
+          <button
+            onClick={() => void runPipeline()}
+            disabled={running || !pipeline}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet py-2.5 text-[13px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
+          >
+            {running ? <Loader2 size={15} className="animate-spin" /> : <Play size={14} className="fill-current" />}
+            Run pipeline
+          </button>
+        </div>
+      </section>
 
-          {/* Trace — look-deeper tools, closed by default */}
-          <details className="rounded-xl border border-line bg-white/[0.02]">
-            <summary className="cursor-pointer list-none px-3 py-2 text-[11.5px] font-medium text-ink-dim transition hover:text-ink">
-              Run trace
-            </summary>
-            <div className="space-y-6 border-t border-line px-3 pb-3 pt-3">
-              <section>
-                <h3 className="mb-2 text-[12px] font-medium text-ink">Timeline</h3>
-                <RunTimeline />
-              </section>
-              <section>
-                <h3 className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-ink">
-                  <Gauge size={13} className="text-green" /> Optimize
-                </h3>
-                <OptimizePanel />
-              </section>
-              <PacketTab />
-              <TakesPanel />
-            </div>
-          </details>
-        </div>
-      ) : (
-        <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed border-line px-6 text-center">
-          <p className="text-[13px] text-ink">Run the pipeline to see results here.</p>
-        </div>
+      <section>
+        <SectionLabel title="Data sources" />
+        <DatasetPanel />
+      </section>
+    </div>
+  );
+}
+
+/* ── Preview — the product surface: what you're shipping ────────────────────── */
+
+function PreviewTab() {
+  const tables = usePipelineStore((s) => s.tables);
+  const pipeline = usePipelineStore((s) => s.pipeline);
+  const connectToUI = usePipelineStore((s) => s.connectToUI);
+  const bindings = pipeline?.uiBindings ?? [];
+
+  return (
+    <div className="space-y-6">
+      <ProductPanel />
+      {connectToUI && bindings.length > 0 && tables.some((t) => t.rows.length > 0) && (
+        <section>
+          <SectionLabel title="UI Preview" />
+          <UIPreview tables={tables} bindings={bindings} />
+        </section>
       )}
     </div>
   );
