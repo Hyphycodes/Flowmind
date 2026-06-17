@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUp, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowUp, Loader2, Sparkles, Wrench, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { EXPORT_MODES } from "@/lib/export/schema";
 import { EFFORT_LEVELS, EFFORT_HINTS, EFFORT_LABELS } from "@/lib/pipeline/effort";
 import { getRemixAction } from "@/lib/product/remix";
+import { classifyIntent, diagnosePipeline, summarizePipeline } from "@/lib/trace/diagnose";
+import { cn } from "@/lib/ui/cn";
 
 // Starter prompt chips (Prompt 18) — illustrative example prompts that teach the format and
 // showcase the generation engine. Not a catalog; rotating inspiration. None on the do-not-ship list.
@@ -48,9 +50,15 @@ export function CommandBar() {
   const openExport = usePipelineStore((s) => s.openExport);
   const runExport = usePipelineStore((s) => s.runExport);
   const rerunTeam = usePipelineStore((s) => s.rerunTeam);
+  const activeRunTrace = usePipelineStore((s) => s.activeRunTrace);
+  const steps = usePipelineStore((s) => s.steps);
   const [text, setText] = useState("");
+  // Diagnostic answers (Prompt 19a) — plain-English, non-mutating, shown above the input.
+  const [diagnostic, setDiagnostic] = useState<string | null>(null);
 
   const hasPipeline = Boolean(pipeline && pipeline.nodes.length > 0);
+  // Dual-mode (Prompt 19a): empty canvas = CREATE (generative), populated = EDIT (precise).
+  const mode: "create" | "edit" = hasPipeline ? "edit" : "create";
   const busy = generating || editing;
   const selectedNode = selectedNodeId ? pipeline?.nodes.find((n) => n.id === selectedNodeId) : undefined;
   const isTeam = Boolean(selectedNode?.team && (selectedNode.team.agents.length ?? 0) > 0);
@@ -117,9 +125,19 @@ export function CommandBar() {
     }
 
     setText("");
-    // Blank pipeline → generate from scratch. Existing pipeline → propose a reviewable edit diff.
-    if (hasPipeline) void proposeEdit(v);
-    else void generate(v);
+    setDiagnostic(null);
+    if (!hasPipeline) {
+      // CREATE mode → generate from scratch.
+      void generate(v);
+      return;
+    }
+    // EDIT mode → route by intent. Diagnostic questions explain (no mutation); edit requests
+    // propose a reviewable diff. Ambiguous defaults to diagnostic (safe).
+    if (classifyIntent(v) === "diagnostic") {
+      setDiagnostic(diagnosePipeline(pipeline, activeRunTrace, steps, v));
+    } else {
+      void proposeEdit(v);
+    }
   };
 
   return (
@@ -171,23 +189,52 @@ export function CommandBar() {
         </div>
       )}
 
+      {/* Diagnostic answer (Prompt 19a) — non-mutating, cites specific nodes. */}
+      {diagnostic && (
+        <div className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-cyan/25 bg-cyan/[0.04] p-3.5 glass-strong fm-fade-up shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+          <div className="flex items-start gap-2">
+            <Sparkles size={14} className="mt-0.5 shrink-0 text-cyan" />
+            <p className="flex-1 text-[12.5px] leading-relaxed text-ink">{diagnostic}</p>
+            <button onClick={() => setDiagnostic(null)} className="shrink-0 text-ink-faint transition hover:text-ink">
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit-mode pipeline summary, built from real graph + run state. */}
+      {mode === "edit" && !clarify && (
+        <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-cyan/20 bg-cyan/[0.04] px-3 py-1 text-[11px] text-ink-dim">
+          <Wrench size={11} className="text-cyan" />
+          {summarizePipeline(pipeline, activeRunTrace)}
+        </div>
+      )}
+
       <div className="pointer-events-auto w-full max-w-2xl">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             submit();
           }}
-          className="flex items-center gap-2 rounded-2xl px-3 py-2 glass-strong shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
+          className={cn(
+            "flex items-center gap-2 rounded-2xl border px-3 py-2 glass-strong shadow-[0_12px_40px_rgba(0,0,0,0.5)] transition-colors",
+            // Ambient mode signal: creation feels generative (violet), edit feels precise (cyan).
+            mode === "edit" ? "border-cyan/30" : "border-violet/25",
+          )}
         >
-          <Sparkles size={17} className="ml-1 shrink-0 text-violet" />
+          {mode === "edit" ? (
+            <Wrench size={16} className="ml-1 shrink-0 text-cyan" />
+          ) : (
+            <Sparkles size={17} className="ml-1 shrink-0 text-violet" />
+          )}
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={
               clarify
                 ? "Answer in a sentence, or press enter to just build it…"
-                : hasPipeline
-                  ? "Tell the copilot what to change…"
+                : mode === "edit"
+                  ? "Ask anything about this pipeline — edit a node, debug an output, add a step…"
                   : "Describe the AI system you want to build…"
             }
             className="flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
@@ -212,8 +259,11 @@ export function CommandBar() {
           <button
             type="submit"
             disabled={busy || !text.trim()}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-violet text-white transition hover:bg-violet/90 disabled:opacity-40"
-            aria-label={hasPipeline ? "Propose change" : "Generate pipeline"}
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white transition disabled:opacity-40",
+              mode === "edit" ? "bg-cyan hover:bg-cyan/90" : "bg-violet hover:bg-violet/90",
+            )}
+            aria-label={hasPipeline ? "Send" : "Generate pipeline"}
           >
             {busy ? <Loader2 size={15} className="animate-spin" /> : <ArrowUp size={16} />}
           </button>
