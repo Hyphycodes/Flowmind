@@ -65,7 +65,7 @@ export function FinalCTA({ ctaHref, ctaLabel }: { ctaHref: string; ctaLabel: str
         </p>
         <Link
           href={ctaHref}
-          className="group mt-8 inline-flex items-center gap-1.5 rounded-xl bg-violet px-6 py-3 text-[14.5px] font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-violet/90 hover:shadow-[0_12px_36px_-8px_rgba(139,92,246,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+          className="group mt-8 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-violet px-6 py-3 text-[14.5px] font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-violet/90 hover:shadow-[0_12px_36px_-8px_rgba(139,92,246,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas sm:w-auto"
         >
           {ctaLabel}
           <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-0.5" />

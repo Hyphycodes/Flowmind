@@ -10,7 +10,7 @@ import { DOT_FIELD, EdgeLayer, LandingNode, type EdgeSpec, type GraphNodeSpec, t
 import { stageWidth, useMeasuredWidth } from "./hooks";
 
 const STAGE = { w: 860, h: 460 };
-const STAGE_SM = { w: 320, h: 470 };
+const STAGE_SM = { w: 320, h: 624 };
 
 // Wide DAG (Source → Brain → Surface): intake fans into a research crew + a
 // scorer, both synthesize, then a buyer-facing surface.
@@ -25,8 +25,9 @@ const FULL: GraphNodeSpec[] = [
 // Compact, stacked layout for narrow screens — same language, fewer beats.
 const COMPACT: GraphNodeSpec[] = [
   { id: "in", title: "Intake", type: "input", color: "blue", desc: "Lead + property data", x: 30, y: 8, w: 260 },
-  { id: "crew", title: "Research Crew", type: "agent", color: "violet", desc: "Comps · ARV · rehab", team: 6, x: 30, y: 178, w: 260 },
-  { id: "out", title: "Buyer Pitch", type: "output", color: "pink", desc: "Audience-ready", outputs: ["pitch"], x: 30, y: 348, w: 260 },
+  { id: "crew", title: "Research Crew", type: "agent", color: "violet", desc: "Comps · ARV · rehab", team: 6, x: 30, y: 158, w: 260 },
+  { id: "score", title: "Deal Scorer", type: "evaluator", color: "gold", desc: "Underwrite the deal", outputs: ["score", "grade"], x: 30, y: 318, w: 260 },
+  { id: "out", title: "Buyer Pitch", type: "output", color: "pink", desc: "Audience-ready", outputs: ["pitch"], x: 30, y: 478, w: 260 },
 ];
 
 const FULL_EDGES: EdgeSpec[] = [
@@ -38,12 +39,13 @@ const FULL_EDGES: EdgeSpec[] = [
 ];
 const COMPACT_EDGES: EdgeSpec[] = [
   ["in", "crew"],
-  ["crew", "out"],
+  ["crew", "score"],
+  ["score", "out"],
 ];
 
 // Dependency-ordered "run" sweep groups (parallel members light together).
 const FULL_SWEEP = [["in"], ["crew", "score"], ["synth"], ["out"]];
-const COMPACT_SWEEP = [["in"], ["crew"], ["out"]];
+const COMPACT_SWEEP = [["in"], ["crew"], ["score"], ["out"]];
 
 export function HeroGraph() {
   const [ref, rawWidth] = useMeasuredWidth<HTMLDivElement>();

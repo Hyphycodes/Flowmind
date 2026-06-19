@@ -16,13 +16,27 @@ const NAV = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
+/** Shared nav content for both the persistent desktop rail and the mobile drawer.
+ *  `onNavigate` lets the drawer close on tap; `large` gives 44px+ tap targets. */
+export function SidebarContent({
+  onNewPipeline,
+  onNavigate,
+  large = false,
+}: {
+  onNewPipeline?: () => void;
+  onNavigate?: () => void;
+  large?: boolean;
+}) {
   const path = usePathname();
   const router = useRouter();
 
   return (
-    <aside className="z-20 flex h-full w-[244px] shrink-0 flex-col border-r border-line bg-[#09090f]/80 px-4 py-5 backdrop-blur-xl">
-      <Link href="/" className="px-2 font-display text-[26px] italic leading-none tracking-tight text-ink">
+    <>
+      <Link
+        href="/"
+        onClick={onNavigate}
+        className="px-2 font-display text-[26px] italic leading-none tracking-tight text-ink"
+      >
         flowmind
       </Link>
 
@@ -30,8 +44,15 @@ export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
 
       <button
         type="button"
-        onClick={() => (onNewPipeline ? onNewPipeline() : router.push("/editor?new=1"))}
-        className="mt-6 flex items-center justify-center gap-2 rounded-xl border border-line-strong bg-white/[0.04] py-2.5 text-sm font-medium text-ink transition hover:bg-white/[0.09]"
+        onClick={() => {
+          onNavigate?.();
+          if (onNewPipeline) onNewPipeline();
+          else router.push("/editor?new=1");
+        }}
+        className={cn(
+          "mt-6 flex items-center justify-center gap-2 rounded-xl border border-line-strong bg-white/[0.04] text-sm font-medium text-ink transition hover:bg-white/[0.09]",
+          large ? "py-3" : "py-2.5",
+        )}
       >
         <Plus size={16} /> New Pipeline
       </button>
@@ -44,8 +65,10 @@ export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] transition",
+                "flex items-center gap-3 rounded-lg px-3 text-[13.5px] transition",
+                large ? "py-3" : "py-2",
                 active ? "bg-white/[0.08] text-ink" : "text-ink-dim hover:bg-white/[0.04] hover:text-ink",
               )}
             >
@@ -58,8 +81,18 @@ export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
 
       <div className="mt-auto space-y-4">
         <UsageMeter />
-        <ProfileCard />
+        <ProfileCard onNavigate={onNavigate} />
       </div>
+    </>
+  );
+}
+
+/** Persistent left rail — desktop only (hidden below `md`; the mobile drawer
+ *  in MobileNav reuses SidebarContent instead). */
+export function Sidebar({ onNewPipeline }: { onNewPipeline?: () => void }) {
+  return (
+    <aside className="z-20 hidden h-full w-[244px] shrink-0 flex-col border-r border-line bg-[#09090f]/80 px-4 py-5 backdrop-blur-xl md:flex">
+      <SidebarContent onNewPipeline={onNewPipeline} />
     </aside>
   );
 }
@@ -69,7 +102,7 @@ type Session = {
   user: { email?: string | null; displayName?: string | null; avatarUrl?: string | null } | null;
 };
 
-function ProfileCard() {
+function ProfileCard({ onNavigate }: { onNavigate?: () => void }) {
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
@@ -86,7 +119,7 @@ function ProfileCard() {
   if (user) {
     const name = user.displayName ?? user.email ?? "You";
     return (
-      <Link href="/account" className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5 transition hover:bg-white/[0.04]">
+      <Link href="/account" onClick={onNavigate} className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5 transition hover:bg-white/[0.04]">
         {user.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full" />
@@ -106,7 +139,7 @@ function ProfileCard() {
   // Auth enabled but not signed in
   if (enabled) {
     return (
-      <Link href="/login" className="flex items-center gap-2 rounded-xl border border-line-strong bg-white/[0.04] p-2.5 text-[13px] font-medium text-ink transition hover:bg-white/[0.09]">
+      <Link href="/login" onClick={onNavigate} className="flex items-center gap-2 rounded-xl border border-line-strong bg-white/[0.04] p-2.5 text-[13px] font-medium text-ink transition hover:bg-white/[0.09]">
         <LogIn size={15} /> Sign in
       </Link>
     );
@@ -114,7 +147,7 @@ function ProfileCard() {
 
   // Demo mode
   return (
-    <Link href="/account" className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5 transition hover:bg-white/[0.04]">
+    <Link href="/account" onClick={onNavigate} className="flex items-center gap-2.5 rounded-xl border border-line bg-white/[0.02] p-2.5 transition hover:bg-white/[0.04]">
       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet to-pink text-xs font-semibold text-white">F</div>
       <div className="min-w-0">
         <div className="truncate text-[13px] font-medium text-ink">Demo</div>

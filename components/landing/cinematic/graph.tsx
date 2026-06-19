@@ -43,9 +43,12 @@ export const NODE_H = 86;
 export function LandingNode({
   spec,
   state = "idle",
+  fluid = false,
 }: {
   spec: GraphNodeSpec;
   state?: NodeState;
+  /** Stretch to the container width instead of the fixed stage px (mobile stacks). */
+  fluid?: boolean;
 }) {
   const accent = hexFor({ color: spec.color, type: spec.type });
   const Icon = iconForNode(spec);
@@ -64,7 +67,7 @@ export function LandingNode({
         state === "running" && "fm-running",
       )}
       style={{
-        width: spec.w,
+        width: fluid ? "100%" : spec.w,
         // @ts-expect-error css var consumed by globals.css
         "--accent": accent,
         boxShadow: ring,

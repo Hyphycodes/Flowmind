@@ -32,6 +32,10 @@ import { ImportModal } from "@/components/import/ImportModal";
 import { ShareModal } from "@/components/sharing/ShareModal";
 import { TriggersModal } from "@/components/automation/TriggersModal";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { MobileNav } from "@/components/layout/MobileNav";
+import { NodeBottomSheet } from "@/components/canvas/NodeBottomSheet";
+import { ViewerBanner } from "@/components/canvas/ViewerBanner";
+import { useTouchViewport } from "@/lib/ui/responsive";
 
 export function Builder() {
   const setActivePipeline = usePipelineStore((s) => s.setActivePipeline);
@@ -41,6 +45,8 @@ export function Builder() {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const [loading, setLoading] = useState(true);
   const booted = useRef(false);
+  // Mobile + touch → read-only viewer mode (a narrow desktop window keeps the editor).
+  const viewer = useTouchViewport();
 
   const startNew = () => {
     const blank = pipelineSchema.parse({
@@ -132,6 +138,25 @@ export function Builder() {
   }, []);
 
   const empty = !loading && (!pipeline || pipeline.nodes.length === 0);
+
+  // Mobile viewer mode — read-only touch canvas, drawer nav, node bottom sheet.
+  // Editor-only chrome (command bar, inspector, output panel, modals) is omitted.
+  if (viewer) {
+    return (
+      <div className="surface-locked flex flex-col">
+        <MobileNav title={pipeline?.name || "Pipeline"} onNewPipeline={startNew} />
+        <div className="relative min-h-0 flex-1">
+          {loading ? <CanvasLoading /> : empty ? <EmptyCanvas /> : <PipelineCanvas viewer />}
+          {!loading && !empty && (
+            <>
+              <ViewerBanner />
+              <NodeBottomSheet />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="surface-locked flex">

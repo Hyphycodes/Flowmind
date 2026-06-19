@@ -48,7 +48,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="flow-canvas flex min-h-screen w-full items-center justify-center px-6 py-10">
+    <div className="flow-canvas flex min-h-[100dvh] w-full items-center justify-center px-6 py-10">
       <div className="w-full max-w-2xl">
         <div className="mb-6 flex items-center gap-1.5">
           {[0, 1, 2].map((i) => (

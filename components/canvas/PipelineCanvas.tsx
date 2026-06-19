@@ -32,7 +32,7 @@ const edgeTypes = { data: DataEdge };
 const MEMBER_ACCENTS = ["violet", "blue", "teal", "green", "orange", "pink", "cyan"] as const;
 const NON_MERGEABLE = new Set(["input", "output"]);
 
-function Flow() {
+function Flow({ viewer = false }: { viewer?: boolean }) {
   const pipeline = usePipelineStore((s) => s.pipeline);
   const datasets = usePipelineStore((s) => s.datasets);
   const selectedNodeId = usePipelineStore((s) => s.selectedNodeId);
@@ -313,28 +313,35 @@ function Flow() {
             setEdgePeek(null);
           }}
           fitView
-          fitViewOptions={{ padding: 0.28, maxZoom: 1 }}
+          fitViewOptions={{ padding: viewer ? 0.2 : 0.28, maxZoom: viewer ? 1.5 : 1 }}
           minZoom={0.2}
           maxZoom={2.4}
-          panOnDrag={tool === "pan"}
-          selectionOnDrag={tool === "select"}
+          nodesDraggable={!viewer}
+          nodesConnectable={!viewer}
+          panOnDrag={viewer || tool === "pan"}
+          selectionOnDrag={!viewer && tool === "select"}
           zoomOnDoubleClick={false}
           proOptions={{ hideAttribution: true }}
           className="!bg-transparent"
         >
           <Background variant={BackgroundVariant.Dots} gap={26} size={1} color="#ffffff14" />
-          <MiniMap
-            position="bottom-left"
-            pannable
-            zoomable
-            className="!mb-[64px] !ml-4 !rounded-xl"
-            style={{ width: 196, height: 128, background: "#0b0b13", border: "1px solid #ffffff14" }}
-            maskColor="rgba(7,7,12,0.72)"
-            nodeColor={(n) => hexFor({ color: (n.data as { color?: string }).color, type: (n.data as { type?: string }).type })}
-            nodeStrokeWidth={0}
-            nodeBorderRadius={6}
-          />
-          <FloatingCanvasControls tool={tool} setTool={setTool} />
+          {/* Desktop-only canvas controls — viewer mode (mobile) is touch pan/zoom. */}
+          {!viewer && (
+            <>
+              <MiniMap
+                position="bottom-left"
+                pannable
+                zoomable
+                className="!mb-[64px] !ml-4 !rounded-xl"
+                style={{ width: 196, height: 128, background: "#0b0b13", border: "1px solid #ffffff14" }}
+                maskColor="rgba(7,7,12,0.72)"
+                nodeColor={(n) => hexFor({ color: (n.data as { color?: string }).color, type: (n.data as { type?: string }).type })}
+                nodeStrokeWidth={0}
+                nodeBorderRadius={6}
+              />
+              <FloatingCanvasControls tool={tool} setTool={setTool} />
+            </>
+          )}
         </ReactFlow>
       </motion.div>
       <EdgePeek peek={inTeam ? null : edgePeek} onClose={() => setEdgePeek(null)} />
@@ -368,11 +375,11 @@ function Breadcrumb() {
   );
 }
 
-export function PipelineCanvas() {
+export function PipelineCanvas({ viewer = false }: { viewer?: boolean }) {
   return (
-    <div className="flow-canvas relative h-full w-full">
+    <div className="flow-canvas relative h-full w-full" style={viewer ? { touchAction: "none" } : undefined}>
       <ReactFlowProvider>
-        <Flow />
+        <Flow viewer={viewer} />
       </ReactFlowProvider>
     </div>
   );

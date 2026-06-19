@@ -7,9 +7,10 @@
 
 import { useRef } from "react";
 import { motion, useReducedMotion, useScroll, useTransform, type MotionValue } from "framer-motion";
-import { FileCode2, Folder } from "lucide-react";
+import { ChevronDown, FileCode2, Folder } from "lucide-react";
 import { DOT_FIELD, LandingNode, edgePath, type EdgeSpec, type GraphNodeSpec } from "./graph";
-import { stageWidth, useMeasuredWidth } from "./hooks";
+import { stageWidth, useInViewOnce, useMeasuredWidth } from "./hooks";
+import { useIsMobile } from "@/lib/ui/responsive";
 
 const STAGE = { w: 940, h: 430 };
 
@@ -45,6 +46,10 @@ const TREE: { depth: number; name: string; file?: boolean }[] = [
 
 export function ImportBeat() {
   const reduce = useReducedMotion();
+  const isMobile = useIsMobile();
+  // Mobile: the wide horizontal stage would shrink to unreadable nodes — stack it
+  // vertically instead (tree → pipeline), revealed on scroll-into-view.
+  if (isMobile) return <ImportMobile reduce={Boolean(reduce)} />;
   if (reduce) return <ImportStatic />;
   return <ImportScrub />;
 }
@@ -60,6 +65,68 @@ function Header() {
         Point Flowmind at a codebase and watch it resolve into agents, prompts, and the data flowing between them.
       </p>
     </div>
+  );
+}
+
+/** Mobile: tree on top, pipeline stacked below, revealed on scroll-into-view.
+ *  Full-width readable cards instead of a shrunken horizontal stage. */
+function ImportMobile({ reduce }: { reduce: boolean }) {
+  const [ref, seen] = useInViewOnce<HTMLDivElement>();
+  const show = reduce || seen;
+  const rise = (i: number) =>
+    reduce
+      ? {}
+      : {
+          initial: { opacity: 0, y: 14 },
+          animate: show ? { opacity: 1, y: 0 } : undefined,
+          transition: { duration: 0.45, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] as const },
+        };
+  return (
+    <section id="import" className="px-5 py-20 sm:px-8">
+      <Header />
+      <div ref={ref} className="mx-auto mt-8 flex w-full max-w-[320px] flex-col">
+        <motion.div {...rise(0)} className="rounded-2xl p-3 glass">
+          <div className="mb-2 flex items-center gap-1.5 px-1 text-[10.5px] font-medium text-ink-dim">
+            <Folder size={12} className="text-violet" /> your-repo
+          </div>
+          <div className="space-y-[3px]">
+            {TREE.map((row) => (
+              <div
+                key={row.name}
+                className="flex items-center gap-1.5 rounded-md px-1.5 py-[3px] font-mono text-[11px] text-ink-dim"
+                style={{ paddingLeft: 8 + row.depth * 14 }}
+              >
+                {row.file ? <FileCode2 size={11} className="shrink-0 text-ink-faint" /> : <Folder size={11} className="shrink-0 text-violet/80" />}
+                <span className={row.file ? "" : "text-ink"}>{row.name}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
+        <MobileConnector p={rise(1)} />
+
+        {NODES.map((n, i) => (
+          <div key={n.id}>
+            {i > 0 ? <MobileConnector p={rise(2 + i)} /> : null}
+            <motion.div {...rise(2 + i)}>
+              <LandingNode spec={n} state="done" fluid />
+            </motion.div>
+          </div>
+        ))}
+      </div>
+      <p className="mx-auto mt-7 max-w-xs text-center text-[13px] text-ink">
+        Every agent, every prompt, every data flow — visible.
+      </p>
+    </section>
+  );
+}
+
+function MobileConnector({ p }: { p: object }) {
+  return (
+    <motion.div {...p} className="flex flex-col items-center py-1.5" aria-hidden>
+      <span className="h-4 w-px bg-gradient-to-b from-violet/10 to-violet/60" />
+      <ChevronDown size={13} className="-mt-0.5 text-violet/70" />
+    </motion.div>
   );
 }
 

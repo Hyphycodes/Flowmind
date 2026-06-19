@@ -72,12 +72,15 @@ function Tile({
     <motion.div
       onHoverStart={() => setHover(true)}
       onHoverEnd={() => setHover(false)}
+      onTapStart={() => setHover(true)}
+      whileTap={reduce ? undefined : { scale: 0.99 }}
       initial={reduce ? false : { opacity: 0, y: 18 }}
       animate={seen ? { opacity: 1, y: 0 } : undefined}
       transition={{ duration: 0.5, delay: reduce ? 0 : i * 0.08, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-2xl border border-line bg-white/[0.02] p-5 transition-all duration-300",
         "hover:-translate-y-1 hover:border-line-strong hover:bg-white/[0.035]",
+        "active:border-line-strong active:bg-white/[0.035]",
         className,
       )}
     >

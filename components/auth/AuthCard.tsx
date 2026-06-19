@@ -61,7 +61,7 @@ export function AuthCard({ mode }: { mode: "login" | "signup" }) {
   };
 
   return (
-    <div className="flow-canvas flex min-h-screen w-full items-center justify-center px-6">
+    <div className="flow-canvas flex min-h-[100dvh] w-full items-center justify-center px-6 py-10">
       <div className="fm-fade-up w-full max-w-sm rounded-2xl p-6 glass-strong shadow-[0_24px_64px_rgba(0,0,0,0.55)]">
         <Link href="/" className="mb-5 inline-flex items-center gap-1.5 text-[12px] text-ink-faint transition hover:text-ink">
           <ArrowLeft size={13} /> Back to Flowmind
