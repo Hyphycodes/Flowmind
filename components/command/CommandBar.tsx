@@ -140,8 +140,10 @@ export function CommandBar() {
     }
   };
 
+  // pb-20 keeps the centered bar clear of the bottom-left canvas controls pill: with the output
+  // panel open (panelOpen defaults true) the canvas narrows and a pb-6 bar would cover the pill.
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2 px-4 pb-6">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2 px-4 pb-20">
       {notice ? (
         <div className="pointer-events-auto flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-ink-dim glass-strong fm-fade-up">
           <Sparkles size={12} className="text-violet" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -52,7 +52,9 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
   const closeInspector = usePipelineStore((s) => s.closeInspector);
   const mergeNodeIntoTeam = usePipelineStore((s) => s.mergeNodeIntoTeam);
   const undo = usePipelineStore((s) => s.undo);
+  const demoMode = usePipelineStore((s) => s.demoMode);
   const rf = useReactFlow();
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<"select" | "pan">("pan");
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
@@ -62,6 +64,14 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
   const teamId = view.crumbs[view.crumbs.length - 1]?.id;
 
   const statusSig = pipeline ? pipeline.nodes.map((n) => `${n.id}:${n.status}`).join("|") : "";
+  // Identity (not status) of the current view's node set — changes on async load, the demo's
+  // simple↔advanced swap, generate, and merge, but NOT on drag or run. Drives the re-fit below.
+  const nodeIdSig =
+    inTeam && view.team
+      ? view.team.agents.map((a) => a.id).join(",")
+      : pipeline
+        ? pipeline.nodes.map((n) => n.id).join(",")
+        : "";
   const nodeList = pipeline?.nodes;
   const datasetSig = datasets.map((d) => `${d.id}:${d.rows.length}:${d.qualityScore ?? ""}`).join("|");
   const agentSig = agentRunTraces.map((t) => `${t.teamNodeId}:${t.agentId}:${t.status}`).join("|");
@@ -281,8 +291,35 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [teamPath.length, selectedNodeId, exitTeam, selectNode, closeInspector, undo]);
 
+  // Reliable fit-to-frame. The boolean `fitView` prop fires once, too early (before the pane
+  // has its final size), which is what locks the pipeline at ~50% in a corner. Re-fit
+  // imperatively after layout settles, on graph-shape changes, and on container resize. The
+  // double rAF coalesces a resize storm down to one fit per frame.
+  const fitNow = useCallback(() => {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        rf.fitView({ padding: viewer ? 0.2 : 0.3, maxZoom: viewer ? 1.5 : 1, duration: 0 }),
+      ),
+    );
+  }, [rf, viewer]);
+
+  // Re-fit whenever the graph shape changes: team drill (pathKey), the demo's simple↔advanced
+  // swap, async pipeline load (empty→populated), generate, or merge — all change nodeIdSig.
+  useEffect(() => {
+    fitNow();
+  }, [pathKey, nodeIdSig, fitNow]);
+
+  // Re-fit on container resize (panel open/close, window resize).
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => fitNow());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitNow]);
+
   return (
-    <>
+    <div ref={wrapperRef} className="relative h-full w-full">
       {view.crumbs.length > 0 && <Breadcrumb />}
       <motion.div
         key={pathKey}
@@ -312,8 +349,9 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
             selectNode(null);
             setEdgePeek(null);
           }}
+          onInit={() => fitNow()}
           fitView
-          fitViewOptions={{ padding: viewer ? 0.2 : 0.28, maxZoom: viewer ? 1.5 : 1 }}
+          fitViewOptions={{ padding: viewer ? 0.2 : 0.3, maxZoom: viewer ? 1.5 : 1 }}
           minZoom={0.2}
           maxZoom={2.4}
           nodesDraggable={!viewer}
@@ -328,24 +366,27 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
           {/* Desktop-only canvas controls — viewer mode (mobile) is touch pan/zoom. */}
           {!viewer && (
             <>
-              <MiniMap
-                position="bottom-left"
-                pannable
-                zoomable
-                className="!mb-[64px] !ml-4 !rounded-xl"
-                style={{ width: 196, height: 128, background: "#0b0b13", border: "1px solid #ffffff14" }}
-                maskColor="rgba(7,7,12,0.72)"
-                nodeColor={(n) => hexFor({ color: (n.data as { color?: string }).color, type: (n.data as { type?: string }).type })}
-                nodeStrokeWidth={0}
-                nodeBorderRadius={6}
-              />
+              {/* Minimap clutters the public demo (empty dark box) — editor only. */}
+              {!demoMode && (
+                <MiniMap
+                  position="bottom-left"
+                  pannable
+                  zoomable
+                  className="!mb-[64px] !ml-4 !rounded-xl"
+                  style={{ width: 196, height: 128, background: "#0b0b13", border: "1px solid #ffffff14" }}
+                  maskColor="rgba(7,7,12,0.72)"
+                  nodeColor={(n) => hexFor({ color: (n.data as { color?: string }).color, type: (n.data as { type?: string }).type })}
+                  nodeStrokeWidth={0}
+                  nodeBorderRadius={6}
+                />
+              )}
               <FloatingCanvasControls tool={tool} setTool={setTool} />
             </>
           )}
         </ReactFlow>
       </motion.div>
       <EdgePeek peek={inTeam ? null : edgePeek} onClose={() => setEdgePeek(null)} />
-    </>
+    </div>
   );
 }
 

@@ -11,7 +11,7 @@ import { DEMO_COPY } from "@/lib/demo/copy";
  */
 export function DemoNudge({ onDismiss }: { onDismiss: () => void }) {
   return (
-    <div className="fm-fade-up pointer-events-auto fixed bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-line-strong bg-black/80 px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.6)] backdrop-blur">
+    <div className="fm-fade-up pointer-events-auto fixed bottom-6 right-6 z-40 flex items-center gap-3 rounded-2xl border border-line-strong bg-black/80 px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.6)] backdrop-blur">
       <Sparkles size={15} className="text-violet" />
       <span className="text-[13px] text-ink">{DEMO_COPY.nudge}</span>
       <Link

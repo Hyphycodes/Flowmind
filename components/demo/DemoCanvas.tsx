@@ -89,7 +89,7 @@ export function DemoCanvas() {
             <NodePopover />
             <NodeInspector />
             <ExportDialog />
-            <DemoBar onReplayCount={(n) => { if (n >= 2) maybeNudge(); }} />
+            <DemoBar onReplayCount={(n) => { if (n >= 2) maybeNudge(); }} onGatedSubmit={maybeNudge} />
             {nudgeVisible && <DemoNudge onDismiss={() => setNudgeVisible(false)} />}
           </div>
           <OutputPanel />

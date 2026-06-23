@@ -23,6 +23,13 @@ export const DEMO_COPY = {
     explain: "Explain this trace",
     scorer: "Add a scorer",
   },
+
+  // Real demo input (Option A: typing is allowed, running is gated).
+  inputPlaceholder: "Ask about this pipeline…",
+  chatTitle: "Demo assistant",
+  // Shown when the user actually types + sends (no AI is called).
+  gatedReply:
+    "In the full version this runs live against your pipeline. Sign up free to ask your own questions and run them.",
 } as const;
 
 /** Pre-baked chat responses (no network). `explain` is filled from the cached trace at call time. */
