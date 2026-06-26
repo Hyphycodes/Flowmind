@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { FolderUp, Loader2, ShieldCheck, X, AlertTriangle, Check } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
+import { GithubMark } from "@/components/github/GithubMark";
 import type { ImportIR, ImportReport, ImportedAgent } from "@/lib/import/ir";
 import { pipelineSchema } from "@/lib/pipeline/schema";
 
@@ -24,6 +25,8 @@ export function ImportModal() {
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("pick");
+  const [source, setSource] = useState<"github" | "folder">("github");
+  const [repoUrl, setRepoUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ImportReport | null>(null);
@@ -41,6 +44,34 @@ export function ImportModal() {
     setIr(null);
     setNames({});
     setExcluded(new Set());
+    setRepoUrl("");
+  }
+
+  // Phase 1a — fetch + statically analyze a public GitHub repo on the server.
+  async function onRepo() {
+    if (!repoUrl.trim()) return;
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoUrl: repoUrl.trim() }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(j.error ?? "Import failed.");
+        setBusy(false);
+        return;
+      }
+      setReport(j.report as ImportReport);
+      setIr(j.ir as ImportIR);
+      setPhase("reviewing");
+    } catch (err) {
+      setError((err as Error)?.message ?? "Couldn't fetch that repo.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function onClose() {
@@ -164,28 +195,77 @@ export function ImportModal() {
           {error && <div className="mb-3 rounded-lg border border-red/30 bg-red/[0.06] px-3 py-2 text-[12px] text-ink">{error}</div>}
 
           {phase === "pick" && (
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-strong bg-white/[0.02] px-4 py-10 text-center">
-              <FolderUp size={22} className="text-ink-faint" />
-              <p className="max-w-sm text-[12.5px] text-ink-dim">
-                Choose your project folder. We scan TS/JS and Python for LLM calls (Anthropic, OpenAI, Vercel AI, LangChain, CrewAI) and the hand-rolled case.
-              </p>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                // @ts-expect-error non-standard but widely supported directory upload
-                webkitdirectory=""
-                directory=""
-                className="hidden"
-                onChange={(e) => void onFiles(e.target.files)}
-              />
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={busy}
-                className="flex items-center gap-1.5 rounded-xl bg-violet px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
-              >
-                {busy ? <Loader2 size={14} className="animate-spin" /> : <FolderUp size={14} />} Choose folder
-              </button>
+            <div className="space-y-3">
+              {/* Source toggle — URL-first (cleanest, no upload plumbing), folder as fast-follow. */}
+              <div className="flex rounded-lg border border-line p-0.5 text-[12px]">
+                {(["github", "folder"] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      setSource(s);
+                      setError(null);
+                    }}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 transition ${
+                      source === s ? "bg-white/[0.08] text-ink" : "text-ink-faint hover:text-ink"
+                    }`}
+                  >
+                    {s === "github" ? <GithubMark size={13} /> : <FolderUp size={13} />}
+                    {s === "github" ? "GitHub URL" : "Upload folder"}
+                  </button>
+                ))}
+              </div>
+
+              {source === "github" ? (
+                <div className="rounded-xl border border-dashed border-line-strong bg-white/[0.02] p-4">
+                  <p className="mb-2.5 text-[12.5px] text-ink-dim">
+                    Paste a public GitHub repo. Flowmind fetches it read-only and statically maps your agents, tools, and flows.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      value={repoUrl}
+                      onChange={(e) => setRepoUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void onRepo();
+                      }}
+                      placeholder="https://github.com/owner/repo"
+                      autoFocus
+                      className="min-w-0 flex-1 rounded-lg border border-line bg-black/30 px-3 py-2 text-[12.5px] text-ink outline-none focus:border-line-strong"
+                    />
+                    <button
+                      onClick={() => void onRepo()}
+                      disabled={busy || !repoUrl.trim()}
+                      className="flex shrink-0 items-center gap-1.5 rounded-lg bg-violet px-3.5 py-2 text-[12.5px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-40"
+                    >
+                      {busy ? <Loader2 size={14} className="animate-spin" /> : <GithubMark size={14} />} Analyze repo
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-ink-faint">Public repos only in v1. Private repos & folder upload don&apos;t store any credentials.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-strong bg-white/[0.02] px-4 py-10 text-center">
+                  <FolderUp size={22} className="text-ink-faint" />
+                  <p className="max-w-sm text-[12.5px] text-ink-dim">
+                    Choose your project folder. We scan TS/JS and Python for LLM calls (Anthropic, OpenAI, Vercel AI, LangChain, CrewAI) and the hand-rolled case.
+                  </p>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    multiple
+                    // @ts-expect-error non-standard but widely supported directory upload
+                    webkitdirectory=""
+                    directory=""
+                    className="hidden"
+                    onChange={(e) => void onFiles(e.target.files)}
+                  />
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    disabled={busy}
+                    className="flex items-center gap-1.5 rounded-xl bg-violet px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-violet/90 disabled:opacity-50"
+                  >
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <FolderUp size={14} />} Choose folder
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
