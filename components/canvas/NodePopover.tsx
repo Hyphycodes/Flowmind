@@ -7,6 +7,7 @@ import { usePipelineStore } from "@/store/pipelineStore";
 import { DEMO_COPY } from "@/lib/demo/copy";
 import { hexFor, withAlpha } from "@/lib/ui/colors";
 import { iconForNode } from "@/lib/ui/icons";
+import { KIND_DESCRIPTION } from "@/lib/ui/nodeKinds";
 import { resolveTeamView } from "@/lib/pipeline/teamView";
 import { descendantsOf } from "@/lib/pipeline/graph";
 import { useAiAvailable } from "@/lib/ai/useAiAvailable";
@@ -255,6 +256,9 @@ function NodeDetail({
   return (
     <Shell style={style} popRef={popRef}>
       <Header accent={accent} icon={icon} title={title} subtitle={role ? `${typeLabel} · ${role}` : typeLabel} onSettings={node ? () => openInspector(node.id) : undefined} onClose={onClose} />
+
+      {/* Plain-English: what this kind of node does (newcomer orientation). */}
+      {node && <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">{KIND_DESCRIPTION[node.type]}</p>}
 
       <Section icon={ArrowDownToLine} label="What came in" accent={accent}>
         <DataBlock value={inputVal} keys={inputKeys} accent={accent} />

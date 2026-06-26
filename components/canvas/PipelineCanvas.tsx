@@ -8,7 +8,9 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  type Connection,
   type Edge,
+  type EdgeChange,
   type Node,
   type NodeChange,
 } from "@xyflow/react";
@@ -25,6 +27,7 @@ import { AgentNode } from "./AgentNode";
 import { DataEdge } from "./DataEdge";
 import { EdgePeek } from "./EdgePeek";
 import { FloatingCanvasControls } from "./FloatingCanvasControls";
+import { CanvasContextMenu, type CanvasMenu } from "./CanvasContextMenu";
 
 const nodeTypes = { agent: AgentNode };
 const edgeTypes = { data: DataEdge };
@@ -51,12 +54,17 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
   const exitTeam = usePipelineStore((s) => s.exitTeam);
   const closeInspector = usePipelineStore((s) => s.closeInspector);
   const mergeNodeIntoTeam = usePipelineStore((s) => s.mergeNodeIntoTeam);
+  const connectNodes = usePipelineStore((s) => s.connectNodes);
+  const removeNode = usePipelineStore((s) => s.removeNode);
+  const removeEdge = usePipelineStore((s) => s.removeEdge);
+  const setViewportCenter = usePipelineStore((s) => s.setViewportCenter);
   const undo = usePipelineStore((s) => s.undo);
   const demoMode = usePipelineStore((s) => s.demoMode);
   const rf = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<"select" | "pan">("pan");
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [menu, setMenu] = useState<CanvasMenu | null>(null);
 
   const pathKey = teamPath.join(">");
   const view = useMemo(() => resolveTeamView(pipeline, teamPath), [pipeline, teamPath]);
@@ -64,14 +72,6 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
   const teamId = view.crumbs[view.crumbs.length - 1]?.id;
 
   const statusSig = pipeline ? pipeline.nodes.map((n) => `${n.id}:${n.status}`).join("|") : "";
-  // Identity (not status) of the current view's node set — changes on async load, the demo's
-  // simple↔advanced swap, generate, and merge, but NOT on drag or run. Drives the re-fit below.
-  const nodeIdSig =
-    inTeam && view.team
-      ? view.team.agents.map((a) => a.id).join(",")
-      : pipeline
-        ? pipeline.nodes.map((n) => n.id).join(",")
-        : "";
   const nodeList = pipeline?.nodes;
   const datasetSig = datasets.map((d) => `${d.id}:${d.rows.length}:${d.qualityScore ?? ""}`).join("|");
   const agentSig = agentRunTraces.map((t) => `${t.teamNodeId}:${t.agentId}:${t.status}`).join("|");
@@ -236,10 +236,39 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
     (changes: NodeChange[]) => {
       for (const c of changes) {
         if (c.type === "position" && c.position) setNodePosition(c.id, c.position);
+        // Node deletion (Backspace/Delete) — top-level graph only; cleans up its edges.
+        else if (c.type === "remove" && teamPath.length === 0) removeNode(c.id);
       }
     },
-    [setNodePosition],
+    [setNodePosition, removeNode, teamPath.length],
   );
+
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      if (inTeam) return; // internal team edges are derived, not user-editable
+      for (const c of changes) if (c.type === "remove") removeEdge(c.id);
+    },
+    [removeEdge, inTeam],
+  );
+
+  // Drag-a-line wiring (the standard way). connectNodes validates + toasts on rejection.
+  const onConnect = useCallback(
+    (c: Connection) => {
+      if (inTeam || !c.source || !c.target) return;
+      connectNodes(c.source, c.target);
+    },
+    [connectNodes, inTeam],
+  );
+
+  // Keep the store's viewport center fresh so Add-node (which lives outside the React Flow
+  // provider) can spawn new nodes in view. Cheap — nothing subscribes to viewportCenter.
+  const syncCenter = useCallback(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0) return;
+    setViewportCenter(rf.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 }));
+  }, [rf, setViewportCenter]);
 
   // Drag-to-merge (top level only): highlight the hovered target, merge on drop.
   const onNodeDrag = useCallback(
@@ -291,32 +320,38 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [teamPath.length, selectedNodeId, exitTeam, selectNode, closeInspector, undo]);
 
-  // Reliable fit-to-frame. The boolean `fitView` prop fires once, too early (before the pane
-  // has its final size), which is what locks the pipeline at ~50% in a corner. Re-fit
-  // imperatively after layout settles, on graph-shape changes, and on container resize. The
-  // double rAF coalesces a resize storm down to one fit per frame.
+  // Frame the graph. Used on initial pipeline load, on team navigation, and by the explicit
+  // "Fit to view" control — never as a side effect of editing. The double rAF lets layout
+  // settle first (the boolean `fitView` prop alone fires too early and locks it in a corner).
   const fitNow = useCallback(() => {
     requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        rf.fitView({ padding: viewer ? 0.2 : 0.3, maxZoom: viewer ? 1.5 : 1, duration: 0 }),
-      ),
+      requestAnimationFrame(() => {
+        rf.fitView({ padding: viewer ? 0.2 : 0.3, maxZoom: viewer ? 1.5 : 1, duration: 0 });
+        syncCenter();
+      }),
     );
-  }, [rf, viewer]);
+  }, [rf, viewer, syncCenter]);
 
-  // Re-fit whenever the graph shape changes: team drill (pathKey), the demo's simple↔advanced
-  // swap, async pipeline load (empty→populated), generate, or merge — all change nodeIdSig.
+  // Editor Feel — the one principle: nothing on the canvas moves unless the user moves it.
+  // So we fit ONLY when the pipeline being viewed changes (new pipeline loaded / generated /
+  // demo swap) or when entering/leaving a team — captured by pipeline id + team path. Adding
+  // a node, merging, selecting, opening a popover, running, autosaving, or resizing the pane
+  // must never re-frame the canvas.
+  const fitKey = `${pipeline?.id ?? ""}|${pathKey}`;
   useEffect(() => {
     fitNow();
-  }, [pathKey, nodeIdSig, fitNow]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fit only on the framing key
+  }, [fitKey]);
 
-  // Re-fit on container resize (panel open/close, window resize).
+  // On container resize (panel open/close, window resize) keep the stored viewport center
+  // accurate, but DO NOT re-fit — the view holds still.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => fitNow());
+    const ro = new ResizeObserver(() => syncCenter());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [fitNow]);
+  }, [syncCenter]);
 
   return (
     <div ref={wrapperRef} className="relative h-full w-full">
@@ -334,10 +369,12 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
-          onEdgesChange={() => {}}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
           onNodeClick={(_, n) => {
             selectNode(n.id);
             setEdgePeek(null);
+            setMenu(null);
           }}
           onNodeDoubleClick={onNodeDoubleClick}
           onNodeDrag={onNodeDrag}
@@ -348,10 +385,25 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
           onPaneClick={() => {
             selectNode(null);
             setEdgePeek(null);
+            setMenu(null);
+          }}
+          onMoveEnd={syncCenter}
+          onPaneContextMenu={(e) => {
+            if (viewer || inTeam) return;
+            e.preventDefault();
+            setEdgePeek(null);
+            setMenu({ x: e.clientX, y: e.clientY, flow: rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }), nodeId: null });
+          }}
+          onNodeContextMenu={(e, n) => {
+            if (viewer || inTeam) return;
+            e.preventDefault();
+            setEdgePeek(null);
+            setMenu({ x: e.clientX, y: e.clientY, flow: null, nodeId: n.id });
           }}
           onInit={() => fitNow()}
           fitView
           fitViewOptions={{ padding: viewer ? 0.2 : 0.3, maxZoom: viewer ? 1.5 : 1 }}
+          connectionLineStyle={{ stroke: "#8b5cf6", strokeWidth: 2 }}
           minZoom={0.2}
           maxZoom={2.4}
           nodesDraggable={!viewer}
@@ -386,6 +438,7 @@ function Flow({ viewer = false }: { viewer?: boolean }) {
         </ReactFlow>
       </motion.div>
       <EdgePeek peek={inTeam ? null : edgePeek} onClose={() => setEdgePeek(null)} />
+      {menu && !viewer && <CanvasContextMenu menu={menu} onClose={() => setMenu(null)} onFit={() => fitNow()} />}
     </div>
   );
 }

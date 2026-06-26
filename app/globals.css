@@ -57,6 +57,13 @@
   ::selection {
     background: color-mix(in srgb, var(--color-violet) 40%, transparent);
   }
+  /* Tailwind v4 Preflight no longer sets this — every clickable control should feel clickable. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
   /* scrollbars */
   ::-webkit-scrollbar {
     width: 9px;
@@ -109,18 +116,40 @@
 .react-flow__attribution {
   display: none;
 }
-.react-flow__handle {
-  width: 8px;
-  height: 8px;
-  border: none;
-  background: var(--color-ink-faint);
-  opacity: 0.6;
-  transition: opacity 0.15s ease;
-}
-.react-flow__handle:hover {
+/* Connection ports: high-contrast, obviously grabbable, with a generous invisible hit area
+   (the ::before) padded well beyond the visible dot so they're easy to catch even at low zoom.
+   The `.react-flow` ancestor lifts specificity above @xyflow's base stylesheet (which is
+   imported after globals.css in layout.tsx and otherwise wins at equal specificity). */
+.react-flow .react-flow__handle {
+  width: 11px;
+  height: 11px;
+  border: 2px solid #0a0a12;
+  background: #cfd0de;
+  border-radius: 9999px;
   opacity: 1;
+  cursor: crosshair;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease;
 }
-.react-flow__node {
+.react-flow .react-flow__handle::before {
+  content: "";
+  position: absolute;
+  inset: -11px;
+  border-radius: 9999px;
+}
+.react-flow .react-flow__handle:hover {
+  background: #ffffff;
+  box-shadow: 0 0 0 5px rgba(139, 92, 246, 0.22);
+}
+/* live connection feedback: the handle you're dragging from / a valid drop target */
+.react-flow .react-flow__handle.connectingfrom,
+.react-flow .react-flow__handle.connectingto,
+.react-flow .react-flow__handle.valid {
+  background: var(--color-violet);
+  box-shadow: 0 0 0 5px rgba(139, 92, 246, 0.3);
+}
+.react-flow .react-flow__node {
   cursor: grab;
 }
 .react-flow__node.dragging {

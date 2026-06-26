@@ -3,6 +3,7 @@ import { getDemoRun, type DemoLevel } from "@/lib/demo/cachedRun";
 import {
   pipelineSchema,
   pipelineNodeSchema,
+  pipelineEdgeSchema,
   type AgentConfig,
   type AgentRunTrace,
   type ExecutionMode,
@@ -101,6 +102,9 @@ interface PipelineState {
   inspectorOpen: boolean;
   /** view stack of entered team ids — zoom into a team's internal canvas (max depth 3) */
   teamPath: string[];
+  /** current viewport center in flow coords — kept fresh by the canvas so new nodes
+   *  (Add-node menu, which lives outside the React Flow provider) land in view. */
+  viewportCenter: Pos | null;
 
   runStatus: RunStatus;
   runningNodeId: string | null;
@@ -213,6 +217,12 @@ interface PipelineState {
   removeTeamAgent: (nodeId: string, agentId: string) => void;
   coordinateTeam: (nodeId: string) => void;
   setNodePosition: (id: string, position: Pos) => void;
+  setViewportCenter: (p: Pos | null) => void;
+  /** Connect two nodes (drag-a-line / right-click "Connect to"). Validates against
+   *  self-loops, duplicates, output→/→input, and cycles; sets a notice on rejection. */
+  connectNodes: (source: string, target: string) => void;
+  removeNode: (id: string) => void;
+  removeEdge: (id: string) => void;
   setMockInput: (key: string, value: string) => void;
   renamePipeline: (name: string) => void;
 
@@ -274,7 +284,7 @@ interface PipelineState {
   removeLibraryAsset: (id: string) => Promise<void>;
   renameLibraryAsset: (id: string, patch: { name?: string; description?: string; tags?: string[] }) => void;
   bumpAssetUsage: (id: string) => void;
-  insertNodeKind: (kind: PipelineNode["type"]) => void;
+  insertNodeKind: (kind: PipelineNode["type"], position?: Pos) => void;
   insertLibraryNode: (assetId: string) => void;
   applyPromptToSelected: (prompt: string, assetId?: string) => void;
 
@@ -320,6 +330,9 @@ function upsertById<T extends { id: string }>(arr: T[], item: T): T[] {
 }
 
 /** Defaults for inserting a fresh built-in node from the "+ add node" palette. */
+/** "a" / "an" by leading vowel — fixes copy like "Added a Agent node". */
+const article = (word: string): "a" | "an" => (/^[aeiou]/i.test(word) ? "an" : "a");
+
 const NODE_KIND_TITLE: Record<PipelineNode["type"], string> = {
   input: "Input",
   agent: "Agent",
@@ -385,6 +398,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     selectedNodeId: null,
     inspectorOpen: false,
     teamPath: [],
+    viewportCenter: null,
     runStatus: "idle",
     runningNodeId: null,
     runStartedAt: null,
@@ -1294,19 +1308,98 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
       if (hasSupabase()) void saveLibraryAsset(next);
     },
 
-    insertNodeKind: (kind) => {
+    insertNodeKind: (kind, position) => {
       const p = get().pipeline;
       if (!p) return;
-      const maxX = Math.max(0, ...p.nodes.map((n) => n.position.x));
+      // Land the new node in view (Editor Feel: never off in a corner). Priority:
+      // an explicit drop point (right-click menu) → the live viewport center → just
+      // below-right of the selected node → a far-right fallback.
+      const NODE_W = 232;
+      const vc = get().viewportCenter;
+      const selected = p.nodes.find((n) => n.id === get().selectedNodeId);
+      const pos: Pos = position
+        ? position
+        : vc
+          ? { x: Math.round(vc.x - NODE_W / 2), y: Math.round(vc.y - 46) }
+          : selected
+            ? { x: selected.position.x + 280, y: selected.position.y + 70 }
+            : { x: Math.max(0, ...p.nodes.map((n) => n.position.x)) + 320, y: 40 };
       const node = pipelineNodeSchema.parse({
         id: newId(kind),
         type: kind,
         title: NODE_KIND_TITLE[kind],
         color: NODE_KIND_COLOR[kind],
-        position: { x: maxX + 320, y: 40 },
+        position: pos,
       });
       mutate((pp) => ({ ...pp, nodes: [...pp.nodes, node] }));
-      set({ selectedNodeId: node.id, inspectorOpen: false, notice: `Added a ${NODE_KIND_TITLE[kind]} node — drag it onto another to wire it.` });
+      const title = NODE_KIND_TITLE[kind];
+      set({ selectedNodeId: node.id, inspectorOpen: false, notice: `Added ${article(title)} ${title} node — drag from its right port to connect it.` });
+    },
+
+    setViewportCenter: (p) => set({ viewportCenter: p }),
+
+    connectNodes: (source, target) => {
+      const p = get().pipeline;
+      if (!p) return;
+      if (source === target) {
+        set({ notice: "A node can't connect to itself." });
+        return;
+      }
+      const s = p.nodes.find((n) => n.id === source);
+      const t = p.nodes.find((n) => n.id === target);
+      if (!s || !t) return;
+      if (p.edges.some((e) => e.source === source && e.target === target)) {
+        set({ notice: "Those nodes are already connected." });
+        return;
+      }
+      if (s.type === "output") {
+        set({ notice: "Output nodes don't send data onward." });
+        return;
+      }
+      if (t.type === "input") {
+        set({ notice: "Input nodes don't take an incoming connection." });
+        return;
+      }
+      // Cycle guard: if target can already reach source, source→target closes a loop.
+      if (descendantsOf(p, target).has(source)) {
+        set({ notice: "That would create a loop." });
+        return;
+      }
+      pushHistory(p);
+      const edge = pipelineEdgeSchema.parse({
+        id: newId("edge"),
+        source,
+        target,
+        label: s.outputs[0] ?? t.inputs[0] ?? undefined,
+      });
+      mutate((pp) => ({ ...pp, edges: [...pp.edges, edge] }));
+      set({ notice: `Connected ${s.title} → ${t.title}.` });
+    },
+
+    removeNode: (id) => {
+      const p = get().pipeline;
+      const node = p?.nodes.find((n) => n.id === id);
+      if (!p || !node) return;
+      pushHistory(p);
+      set((s) => ({
+        pipeline: {
+          ...p,
+          nodes: p.nodes.filter((n) => n.id !== id),
+          edges: p.edges.filter((e) => e.source !== id && e.target !== id),
+          updatedAt: new Date().toISOString(),
+        },
+        selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+        inspectorOpen: false,
+        notice: `Deleted ${node.title}. Press ⌘Z to undo.`,
+      }));
+      scheduleSave();
+    },
+
+    removeEdge: (id) => {
+      const p = get().pipeline;
+      if (!p || !p.edges.some((e) => e.id === id)) return;
+      pushHistory(p);
+      mutate((pp) => ({ ...pp, edges: pp.edges.filter((e) => e.id !== id) }));
     },
 
     insertLibraryNode: (assetId) => {

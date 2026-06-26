@@ -3,26 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { NODE_TYPES, type NodeType } from "@/lib/pipeline/schema";
-import { ACCENT_HEX, type Accent } from "@/lib/ui/colors";
+import { NODE_TYPES } from "@/lib/pipeline/schema";
+import { ACCENT_HEX } from "@/lib/ui/colors";
+import { KIND_LABEL, KIND_DESCRIPTION, KIND_ACCENT } from "@/lib/ui/nodeKinds";
 import { cn } from "@/lib/ui/cn";
-
-const KIND_LABEL: Record<NodeType, string> = {
-  input: "Input",
-  agent: "Agent",
-  tool: "Tool",
-  transformer: "Transformer",
-  evaluator: "Evaluator",
-  output: "Output",
-};
-const KIND_ACCENT: Record<NodeType, Accent> = {
-  input: "cyan",
-  agent: "violet",
-  tool: "blue",
-  transformer: "slate",
-  evaluator: "pink",
-  output: "gold",
-};
 
 /** The "+ add node" palette: built-in node kinds + reusable assets From Library. Top-level only. */
 export function AddNodePalette() {
@@ -68,7 +52,7 @@ export function AddNodePalette() {
       {open && (
         <div className="mt-2 max-h-[60vh] w-[264px] overflow-y-auto rounded-2xl p-3 glass-strong shadow-[0_16px_48px_rgba(0,0,0,0.55)] fm-fade-up">
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">Built-in</p>
-          <div className="grid grid-cols-2 gap-1.5">
+          <div className="space-y-1">
             {NODE_TYPES.map((k) => (
               <button
                 key={k}
@@ -76,10 +60,13 @@ export function AddNodePalette() {
                   insertNodeKind(k);
                   setOpen(false);
                 }}
-                className="flex items-center gap-1.5 rounded-lg border border-line bg-white/[0.02] px-2.5 py-1.5 text-[12px] text-ink-dim transition hover:border-line-strong hover:text-ink"
+                className="flex w-full items-start gap-2 rounded-lg border border-line bg-white/[0.02] px-2.5 py-1.5 text-left transition hover:border-line-strong active:bg-white/[0.05]"
               >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: ACCENT_HEX[KIND_ACCENT[k]] }} />
-                {KIND_LABEL[k]}
+                <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: ACCENT_HEX[KIND_ACCENT[k]] }} />
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-medium text-ink">{KIND_LABEL[k]}</span>
+                  <span className="block text-[10.5px] leading-snug text-ink-faint">{KIND_DESCRIPTION[k]}</span>
+                </span>
               </button>
             ))}
           </div>
