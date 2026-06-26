@@ -24,6 +24,7 @@ import { CommandBar } from "@/components/command/CommandBar";
 import { DiffProposalPanel } from "@/components/command/DiffProposalPanel";
 import { NodeInspector } from "@/components/panels/NodeInspector";
 import { OutputPanel } from "@/components/panels/OutputPanel";
+import { ResultsTheater } from "@/components/panels/ResultsTheater";
 import { InputStudioPanel } from "@/components/panels/InputStudioPanel";
 import { RemixProposalModal } from "@/components/product/RemixProposalModal";
 import { ExportDialog } from "@/components/export/ExportDialog";
@@ -181,6 +182,7 @@ export function Builder() {
             <UpgradeModal />
           </div>
           <OutputPanel />
+          <ResultsTheater />
         </div>
       </div>
     </div>

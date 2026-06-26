@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Braces, Gauge, Loader2, Play, Route, Type } from "lucide-react";
+import { AlertTriangle, Braces, Gauge, Loader2, Maximize2, Play, Route, Type } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { packetTimeline } from "@/lib/packets/packetUtils";
 import { ACCENT_HEX, isAccent } from "@/lib/ui/colors";
@@ -73,6 +73,7 @@ function OutputTab() {
   const connectToUI = usePipelineStore((s) => s.connectToUI);
   const pipeline = usePipelineStore((s) => s.pipeline);
   const setPanelTab = usePipelineStore((s) => s.setPanelTab);
+  const openResults = usePipelineStore((s) => s.openResults);
   const [asText, setAsText] = useState(false);
 
   const bindings = pipeline?.uiBindings ?? [];
@@ -97,6 +98,14 @@ function OutputTab() {
 
   return (
     <div className="space-y-6">
+      {/* View results — open the big, focused payoff view (the right rail stays the index). */}
+      <button
+        onClick={openResults}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-violet/30 bg-violet/[0.08] py-2.5 text-[13px] font-medium text-violet transition hover:bg-violet/[0.14]"
+      >
+        <Maximize2 size={14} /> View results
+      </button>
+
       {/* Final Output */}
       {finalOutput && (
         <section>

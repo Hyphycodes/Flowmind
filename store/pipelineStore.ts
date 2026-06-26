@@ -293,6 +293,11 @@ interface PipelineState {
   openImport: () => void;
   closeImport: () => void;
 
+  /** Results Theater — the big, focused payoff view of a run's outputs */
+  resultsOpen: boolean;
+  openResults: () => void;
+  closeResults: () => void;
+
   /** Export system */
   openShare: () => void;
   closeShare: () => void;
@@ -450,6 +455,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
     exportHealth: null,
     lastExportManifest: null,
     importOpen: false,
+    resultsOpen: false,
     upgradeGate: null,
     saveStatus: "idle",
     generating: false,
@@ -1434,6 +1440,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => {
 
     openImport: () => set({ importOpen: true }),
     closeImport: () => set({ importOpen: false }),
+
+    openResults: () => set({ resultsOpen: true }),
+    closeResults: () => set({ resultsOpen: false }),
 
     openExport: () => {
       const p = get().pipeline;
