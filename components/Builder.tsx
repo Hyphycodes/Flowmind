@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, Sparkles } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
-import { useWorkspaceStore } from "@/store/workspaceStore";
 import { pipelineSchema } from "@/lib/pipeline/schema";
 import { FIXTURE_DATASETS, getTemplate, instantiatePipeline } from "@/lib/pipeline/fixtures";
 import { newId } from "@/lib/pipeline/validate";
@@ -58,8 +57,9 @@ export function Builder() {
       outputTables: [],
       uiBindings: [],
     });
+    // Don't persist an empty draft — that's what littered the list with "Untitled"
+    // rows. Autosave (scheduleSave) writes it the moment it gets real content.
     setActivePipeline(blank, null);
-    if (hasSupabase()) void upsertPipeline(blank, useWorkspaceStore.getState().activeWorkspaceId);
   };
 
   useEffect(() => {
@@ -83,7 +83,8 @@ export function Builder() {
         const t = getTemplate(templateId);
         if (t) {
           const p = instantiatePipeline(t.pipeline);
-          if (hasSupabase()) await upsertPipeline(p);
+          // Opening a demo/template shouldn't create a row on every click (that's how the
+          // list filled with duplicate "Research Intelligence Crew"s). It persists on first edit.
           setActivePipeline(p, { ...t.exampleRun, pipelineId: p.id });
           if (t.takes?.length) hydrateTakes(t.takes.map((tk) => ({ ...tk, pipelineId: p.id })));
           window.history.replaceState({}, "", "/editor");
