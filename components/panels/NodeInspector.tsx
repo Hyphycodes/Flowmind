@@ -33,7 +33,10 @@ function NodeInspectorPanel({ node }: { node: NonNullable<ReturnType<typeof useP
   const icon = iconForNode(node);
 
   return (
-    <div className="absolute right-5 top-5 z-30 w-[320px] rounded-2xl p-4 glass-strong fm-fade-up shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
+    // Tamed floating panel (Prompt 06 Tier 1): pinned top-right, constrained to the viewport
+    // height with its own internal scroll so long content (Source Layer, Re-run, etc.) is always
+    // reachable and never cut off at the bottom on short windows.
+    <div className="absolute right-5 top-5 z-30 max-h-[calc(100dvh-2.5rem)] w-[320px] overflow-y-auto overscroll-contain rounded-2xl p-4 glass-strong fm-fade-up shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
       <div className="flex items-start gap-3">
         <div
           className="flex h-9 w-9 items-center justify-center rounded-xl"

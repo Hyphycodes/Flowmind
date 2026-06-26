@@ -10,6 +10,7 @@ import { iconForNode } from "@/lib/ui/icons";
 import { KIND_DESCRIPTION } from "@/lib/ui/nodeKinds";
 import { resolveTeamView } from "@/lib/pipeline/teamView";
 import { descendantsOf } from "@/lib/pipeline/graph";
+import { inputSources, outputConsumers, type LineageRef } from "@/lib/pipeline/lineage";
 import { useAiAvailable } from "@/lib/ai/useAiAvailable";
 import type { AgentConfig, PipelineNode } from "@/lib/pipeline/schema";
 import { ExplainButton } from "./ExplainButton";
@@ -118,22 +119,43 @@ function TeamSummary({
   popRef: React.RefObject<HTMLDivElement | null>;
   onClose: () => void;
 }) {
+  const pipeline = usePipelineStore((s) => s.pipeline);
+  const selectNode = usePipelineStore((s) => s.selectNode);
   const enterTeam = usePipelineStore((s) => s.enterTeam);
   const openInspector = usePipelineStore((s) => s.openInspector);
   const saveToLibrary = usePipelineStore((s) => s.saveToLibrary);
   const accent = hexFor({ color: node.color, type: node.type });
   const members = node.team!.agents.filter((a) => !a.isController);
   const controllers = node.team!.agents.filter((a) => a.isController);
+  const inMap = pipeline ? inputSources(pipeline, node) : {};
+  const outMap = pipeline ? outputConsumers(pipeline, node) : {};
 
   return (
     <Shell style={style} popRef={popRef}>
       <Header accent={accent} icon={Users} title={node.title} subtitle={`team · ${node.team!.strategy}`} onSettings={() => openInspector(node.id)} onClose={onClose} />
       {node.role && <p className="mt-2.5 text-[12px] leading-relaxed text-ink-dim">{node.role}</p>}
 
-      <div className="mt-3 space-y-2">
-        <Pills label="Inputs" items={node.inputs} accent={accent} dim />
-        <Pills label="Outputs" items={node.outputs} accent={accent} />
-      </div>
+      {/* Data lineage: what feeds this team, and who consumes what it produces (clickable). */}
+      {(node.inputs.length > 0 || node.outputs.length > 0) && (
+        <div className="mt-3 space-y-2.5">
+          {node.inputs.length > 0 && (
+            <div>
+              <SectionLabel label="What feeds this team" />
+              <div className="mt-1.5">
+                <LineageRow keys={node.inputs} map={inMap} dir="in" accent={accent} onPick={selectNode} />
+              </div>
+            </div>
+          )}
+          {node.outputs.length > 0 && (
+            <div>
+              <SectionLabel label="What it produces" />
+              <div className="mt-1.5">
+                <LineageRow keys={node.outputs} map={outMap} dir="out" accent={accent} onPick={selectNode} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-3.5 text-[10px] font-medium uppercase tracking-wide text-ink-faint">
         {members.length} member{members.length === 1 ? "" : "s"}
@@ -207,6 +229,7 @@ function NodeDetail({
   const runPipeline = usePipelineStore((s) => s.runPipeline);
   const runSoloAgent = usePipelineStore((s) => s.runSoloAgent);
   const saveToLibrary = usePipelineStore((s) => s.saveToLibrary);
+  const selectNode = usePipelineStore((s) => s.selectNode);
   const demoMode = usePipelineStore((s) => s.demoMode);
   const aiAvailable = useAiAvailable();
 
@@ -229,6 +252,9 @@ function NodeDetail({
   const outputKeys = node?.outputs ?? [];
   const inputVal = node ? step?.input : trace?.input;
   const outputVal = node ? step?.output : trace?.output;
+  // Data lineage (top-level nodes): which node fed each input, who consumes each output.
+  const inMap = node && pipeline ? inputSources(pipeline, node) : {};
+  const outMap = node && pipeline ? outputConsumers(pipeline, node) : {};
 
   const [prompt, setPrompt] = useState(node?.prompt ?? agent?.prompt ?? "");
   const savePrompt = () => {
@@ -261,7 +287,8 @@ function NodeDetail({
       {node && <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">{KIND_DESCRIPTION[node.type]}</p>}
 
       <Section icon={ArrowDownToLine} label="What came in" accent={accent}>
-        <DataBlock value={inputVal} keys={inputKeys} accent={accent} />
+        {node && <LineageRow keys={inputKeys} map={inMap} dir="in" accent={accent} onPick={selectNode} />}
+        <DataBlock value={inputVal} keys={inputKeys} accent={accent} showKeys={!node} />
       </Section>
 
       <div className="mt-3">
@@ -283,7 +310,8 @@ function NodeDetail({
       </div>
 
       <Section icon={ArrowUpFromLine} label="What went out" accent={accent}>
-        <DataBlock value={outputVal} keys={outputKeys} accent={accent} />
+        {node && <LineageRow keys={outputKeys} map={outMap} dir="out" accent={accent} onPick={selectNode} />}
+        <DataBlock value={outputVal} keys={outputKeys} accent={accent} showKeys={!node} />
       </Section>
 
       {(step?.summary || trace?.outputSummary) && (
@@ -423,42 +451,73 @@ function Section({
   );
 }
 
-function Pills({ label, items, accent, dim }: { label: string; items: string[]; accent: string; dim?: boolean }) {
-  if (!items.length) return null;
+/** A clickable lineage line per key: `key ← Source` (inputs) or `key → Consumer` (outputs).
+ *  Clicking a source/consumer highlights it on the canvas (selection only — the view never
+ *  jumps, per the Editor Feel rule). */
+function LineageRow({
+  keys,
+  map,
+  dir,
+  accent,
+  onPick,
+}: {
+  keys: string[];
+  map: Record<string, LineageRef[]>;
+  dir: "in" | "out";
+  accent: string;
+  onPick: (id: string) => void;
+}) {
+  if (!keys.length) return null;
   return (
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 w-12 shrink-0 text-[10px] uppercase tracking-wide text-ink-faint">{label}</span>
-      <div className="flex flex-wrap gap-1">
-        {items.map((i) => (
-          <span
-            key={i}
-            className="rounded-md px-1.5 py-[2px] font-mono text-[10px]"
-            style={{ background: dim ? "#ffffff0d" : withAlpha(accent, 0.12), color: dim ? "#a6a7ba" : accent }}
-          >
-            {i}
-          </span>
-        ))}
-      </div>
+    <div className="mb-1.5 space-y-1">
+      {keys.map((k) => {
+        const refs = map[k] ?? [];
+        return (
+          <div key={k} className="flex flex-wrap items-center gap-1 text-[10.5px]">
+            <span className="rounded-md px-1.5 py-[2px] font-mono" style={{ background: withAlpha(accent, 0.12), color: accent }}>
+              {k}
+            </span>
+            {refs.length ? (
+              refs.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => onPick(r.id)}
+                  title={`Highlight ${r.title} on the canvas`}
+                  className="inline-flex items-center gap-1 rounded-md border border-line bg-white/[0.03] px-1.5 py-[2px] text-ink-dim transition hover:border-line-strong hover:text-ink"
+                >
+                  <span className="text-ink-faint">{dir === "in" ? "←" : "→"}</span>
+                  <span className="max-w-[130px] truncate">{r.title}</span>
+                </button>
+              ))
+            ) : (
+              <span className="text-ink-faint">{dir === "in" ? "← external input" : "→ final output"}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/** Shows real run values when present; otherwise the declared key names as chips. */
-function DataBlock({ value, keys, accent }: { value: unknown; keys: string[]; accent: string }) {
+/** Shows real run values when present; otherwise (for agents) the declared key names as chips. */
+function DataBlock({ value, keys, accent, showKeys = true }: { value: unknown; keys: string[]; accent: string; showKeys?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const empty = value === undefined || value === null || value === "";
 
   if (empty) {
-    if (!keys.length) return <span className="text-[11.5px] text-ink-faint">Run to see values.</span>;
-    return (
-      <div className="flex flex-wrap gap-1">
-        {keys.map((k) => (
-          <span key={k} className="rounded-md px-1.5 py-[2px] font-mono text-[10.5px]" style={{ background: withAlpha(accent, 0.12), color: accent }}>
-            {k}
-          </span>
-        ))}
-      </div>
-    );
+    if (showKeys && keys.length) {
+      return (
+        <div className="flex flex-wrap gap-1">
+          {keys.map((k) => (
+            <span key={k} className="rounded-md px-1.5 py-[2px] font-mono text-[10.5px]" style={{ background: withAlpha(accent, 0.12), color: accent }}>
+              {k}
+            </span>
+          ))}
+        </div>
+      );
+    }
+    return <span className="text-[11.5px] text-ink-faint">No data yet — run to see it.</span>;
   }
 
   const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
