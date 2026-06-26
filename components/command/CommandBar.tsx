@@ -52,6 +52,8 @@ export function CommandBar() {
   const rerunTeam = usePipelineStore((s) => s.rerunTeam);
   const activeRunTrace = usePipelineStore((s) => s.activeRunTrace);
   const steps = usePipelineStore((s) => s.steps);
+  const runStatus = usePipelineStore((s) => s.runStatus);
+  const runningNodeId = usePipelineStore((s) => s.runningNodeId);
   const [text, setText] = useState("");
   // Diagnostic answers (Prompt 19a) — plain-English, non-mutating, shown above the input.
   const [diagnostic, setDiagnostic] = useState<string | null>(null);
@@ -60,6 +62,13 @@ export function CommandBar() {
   // Dual-mode (Prompt 19a): empty canvas = CREATE (generative), populated = EDIT (precise).
   const mode: "create" | "edit" = hasPipeline ? "edit" : "create";
   const busy = generating || editing;
+  // Live run progress (Run Theater): which step is executing, and how far along.
+  const running = runStatus === "running";
+  const totalSteps = steps.length;
+  const doneSteps = steps.filter((s) => s.status === "success" || s.status === "error").length;
+  const runningStep =
+    steps.find((s) => s.status === "running") ?? (runningNodeId ? steps.find((s) => s.nodeId === runningNodeId) : undefined);
+  const stepNum = Math.min(totalSteps, doneSteps + (running ? 1 : 0));
   const selectedNode = selectedNodeId ? pipeline?.nodes.find((n) => n.id === selectedNodeId) : undefined;
   const isTeam = Boolean(selectedNode?.team && (selectedNode.team.agents.length ?? 0) > 0);
   const isSource = Boolean(
@@ -204,8 +213,25 @@ export function CommandBar() {
         </div>
       )}
 
-      {/* Edit-mode pipeline summary, built from real graph + run state. */}
-      {mode === "edit" && !clarify && (
+      {/* Live run progress (Run Theater) — replaces the static summary while executing. */}
+      {running && totalSteps > 0 && (
+        <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-violet/30 bg-violet/[0.06] px-3.5 py-1.5 text-[11.5px] glass-strong fm-fade-up">
+          <Loader2 size={12} className="animate-spin text-violet" />
+          <span className="font-medium text-ink">
+            {runningStep ? `Running: ${runningStep.title}` : "Starting run…"}
+          </span>
+          <span className="text-ink-faint">· step {Math.max(1, stepNum)} of {totalSteps}</span>
+          <span className="h-1 w-16 overflow-hidden rounded-full bg-white/10">
+            <span
+              className="block h-full rounded-full bg-violet transition-[width] duration-300"
+              style={{ width: `${Math.round((stepNum / totalSteps) * 100)}%` }}
+            />
+          </span>
+        </div>
+      )}
+
+      {/* Edit-mode pipeline summary, built from real graph + run state (hidden while running). */}
+      {mode === "edit" && !clarify && !running && (
         <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-cyan/20 bg-cyan/[0.04] px-3 py-1 text-[11px] text-ink-dim">
           <Wrench size={11} className="text-cyan" />
           {summarizePipeline(pipeline, activeRunTrace)}

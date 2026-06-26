@@ -71,6 +71,10 @@ export function RunTimeline() {
                   {cost != null && <span className="ml-2 text-ink-dim">{formatUsd(cost)}</span>}
                 </span>
               </div>
+              {/* Plain-language narration of what this step did (the story of the run). */}
+              {s.summary && (
+                <p className="mt-1 line-clamp-2 text-left text-[11px] leading-snug text-ink-dim">{s.summary}</p>
+              )}
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.04]">
                 <div
                   className={s.status === "running" ? "h-full animate-pulse rounded-full" : "h-full rounded-full"}
