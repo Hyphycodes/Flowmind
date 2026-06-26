@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Loader2, Sparkles, Wrench, X } from "lucide-react";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { EXPORT_MODES } from "@/lib/export/schema";
@@ -55,6 +55,7 @@ export function CommandBar() {
   const runStatus = usePipelineStore((s) => s.runStatus);
   const runningNodeId = usePipelineStore((s) => s.runningNodeId);
   const [text, setText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
   // Diagnostic answers (Prompt 19a) — plain-English, non-mutating, shown above the input.
   const [diagnostic, setDiagnostic] = useState<string | null>(null);
 
@@ -256,6 +257,7 @@ export function CommandBar() {
             <Sparkles size={17} className="ml-1 shrink-0 text-violet" />
           )}
           <input
+            ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder={
@@ -316,9 +318,14 @@ export function CommandBar() {
                     {CHIPS.map((c) => (
                       <button
                         key={c}
-                        onClick={() => submit(c)}
+                        // Fill the prompt (teach the format) rather than firing blind — the user
+                        // sees what good input looks like, can tweak it, then hits enter.
+                        onClick={() => {
+                          setText(c);
+                          inputRef.current?.focus();
+                        }}
                         disabled={busy}
-                        title={c}
+                        title={`Use as a starting point: ${c}`}
                         className="max-w-[260px] truncate rounded-full border border-line bg-white/[0.03] px-3 py-1 text-xs text-ink-dim transition hover:bg-white/[0.08] hover:text-ink disabled:opacity-50"
                       >
                         {c}
